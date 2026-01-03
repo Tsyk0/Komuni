@@ -69,4 +69,24 @@ public interface ConversationMapper {
         // 新增：查询群聊的已读回执设置
         @Select("SELECT enable_read_receipt FROM conversation WHERE conv_id = #{convId}")
         Boolean getReadReceiptSetting(@Param("convId") Long convId);
+
+
+        @Select("SELECT " +
+                "GREATEST( " +
+                "   (COALESCE(c.current_msg_seq, 0) - COALESCE(cm.last_read_msg_seq, 0)) - " +
+                "   COALESCE(( " +
+                "       SELECT COUNT(*) " +
+                "       FROM message m2 " +
+                "       WHERE m2.conv_id = #{convId} " +
+                "         AND m2.sender_id = #{userId} " +
+                "         AND m2.conv_msg_seq > COALESCE(cm.last_read_msg_seq, 0) " +
+                "         AND m2.message_status IN (1, 2, 3) " +
+                "         AND m2.is_recalled = 0 " +
+                "   ), 0), " +
+                "   0" +
+                ") as unread_count " +  // ⬅️ 必须加别名！
+                "FROM conversation c " +
+                "JOIN conversation_member cm ON c.conv_id = cm.conv_id " +
+                "WHERE c.conv_id = #{convId} AND cm.user_id = #{userId}")
+        Integer getUnreadMessageCount(@Param("convId") Long convId, @Param("userId") Long userId);
 }

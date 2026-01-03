@@ -18,12 +18,13 @@ public class Message {
     private Long replyToMessageId; // 回复的消息ID
     private List<Long> atUserIds; // @的用户ID列表（JSON序列化）
 
+    // 新增字段：会话内消息序列号
+    private Long convMsgSeq; // 会话内消息序列号（从1开始）
+
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private Date sendTime;
 
-    // 删除 readTime 字段，统一使用 message_read_status 表
-    // private Date readTime;
-
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private Date recallTime;
+
 }

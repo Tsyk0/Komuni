@@ -11,18 +11,6 @@ public interface MessageMapper {
     @Select("SELECT * FROM message WHERE message_id = #{messageId}")
     Message selectMessageByMessageId(@Param("messageId") Long messageId);
 
-    @Insert("INSERT INTO message (" +
-            "conv_id, sender_id, receiver_id, message_type, message_content, " +
-            "message_status, is_recalled, reply_to_message_id, at_user_ids, send_time" +
-            ") VALUES (" +
-            "#{convId}, #{senderId}, #{receiverId}, #{messageType}, #{messageContent}, " +
-            "#{messageStatus}, #{isRecalled}, #{replyToMessageId}, " +
-            "#{atUserIds, typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler}, " +
-            "#{sendTime}" +
-            ")")
-    @Options(useGeneratedKeys = true, keyProperty = "messageId")
-    int insertMessage(Message message);
-
     @Select("SELECT * FROM message " +
             "WHERE conv_id = #{convId} AND is_recalled = 0 " +
             "ORDER BY send_time DESC " +
@@ -53,4 +41,28 @@ public interface MessageMapper {
             "WHERE conv_id = #{convId} AND is_recalled = 0 " +
             "ORDER BY send_time DESC LIMIT 1")
     Message selectLastMessageByConvId(@Param("convId") Long convId);
+
+    @Insert("INSERT INTO message (" +
+            "conv_id, sender_id, receiver_id, message_type, message_content, " +
+            "message_status, is_recalled, reply_to_message_id, at_user_ids, " +
+            "conv_msg_seq, send_time" +  // ⬅️ 新增字段
+            ") VALUES (" +
+            "#{convId}, #{senderId}, #{receiverId}, #{messageType}, #{messageContent}, " +
+            "#{messageStatus}, #{isRecalled}, #{replyToMessageId}, " +
+            "#{atUserIds, typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler}, " +
+            "#{convMsgSeq}, #{sendTime}" +  // ⬅️ 新增字段
+            ")")
+    @Options(useGeneratedKeys = true, keyProperty = "messageId")
+    int insertMessage(Message message);
+
+    // 需要添加的方法：按序列号查询
+    @Select("SELECT * FROM message " +
+            "WHERE conv_id = #{convId} AND conv_msg_seq > #{lastSeq} " +
+            "AND is_recalled = 0 " +
+            "ORDER BY conv_msg_seq ASC " +
+            "LIMIT #{limit}")
+    List<Message> selectNewMessagesBySeq(
+            @Param("convId") Long convId,
+            @Param("lastSeq") Long lastSeq,
+            @Param("limit") Integer limit);
 }

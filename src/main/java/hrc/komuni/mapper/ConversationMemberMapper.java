@@ -58,4 +58,17 @@ public interface ConversationMemberMapper {
     @Update("UPDATE conversation_member SET member_status = 0, update_time = NOW() " +
             "WHERE conv_id = #{convId} AND user_id = #{userId}")
     int removeMember(@Param("convId") Long convId, @Param("userId") Long userId);
+
+    @Update("UPDATE conversation_member SET last_read_msg_seq = #{seq}, last_read_time = NOW(), unread_count = 0 WHERE conv_id = #{convId} AND user_id = #{userId}")
+    int updateLastReadSeq(@Param("userId") Long userId,
+                          @Param("convId") Long convId,
+                          @Param("seq") Long seq);
+
+    @Update("UPDATE conversation_member SET unread_count = unread_count + 1, update_time = NOW() WHERE conv_id = #{convId} AND user_id != #{excludeUserId} AND member_status = 1")
+    int incrementUnreadCount(@Param("convId") Long convId,
+                             @Param("excludeUserId") Long excludeUserId);
+
+    @Select("SELECT last_read_msg_seq FROM conversation_member WHERE conv_id = #{convId} AND user_id = #{userId}")
+    Long getLastReadSeq(@Param("userId") Long userId,
+                        @Param("convId") Long convId);
 }

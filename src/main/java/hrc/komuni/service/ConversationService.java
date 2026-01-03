@@ -39,5 +39,5 @@ public interface ConversationService {
     // 新增：查询群聊的已读回执设置
     Boolean getReadReceiptSetting(Long convId);
 
-//    int getUnreadMessageCount(Long convId, Long userId);
+    int getUnreadMessageCount(Long convId, Long userId);
 }

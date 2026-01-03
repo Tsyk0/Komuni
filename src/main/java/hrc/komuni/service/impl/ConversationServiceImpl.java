@@ -205,5 +205,10 @@ public class ConversationServiceImpl implements ConversationService {
         return conversationMapper.getReadReceiptSetting(convId);
     }
 
+    @Override
+    public int getUnreadMessageCount(Long convId, Long userId) {
+        return conversationMapper.getUnreadMessageCount(convId, userId);
+    }
+
 
 }
