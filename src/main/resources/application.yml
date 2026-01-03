@@ -1,0 +1,36 @@
+server:
+  port: 8081
+
+spring:
+  security:
+    enabled: false
+  datasource:
+    url: jdbc:mysql://localhost:3306/komuni?useSSL=false
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  mybatis-plus:
+    configuration:
+      map-underscore-to-camel-case: true
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd
+    time-format: HH:mm:ss
+    datetime-format: yyyy-MM-dd HH:mm:ss
+  # 在这里添加文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# 在spring配置块之外添加文件上传路径配置
+# application.yml
+jwt:
+  secret-key: TSKEY  # 确保有这个配置
+  expiration: 86400000
+
+file:
+  upload:
+    path: ${FILE_UPLOAD_PATH:./uploads/}
+    max-size: 10MB
+    allowed-types: image/jpeg,image/png,application/pdf
