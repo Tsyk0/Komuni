@@ -76,10 +76,18 @@ public class JwtFilter extends OncePerRequestFilter {
         writer.flush();
     }
 
+    /**
+     * 检查请求路径是否需要身份认证
+     *
+     * @param uri 请求路径，如 "/user/login"、"/friend/list"
+     * @return true表示需要认证，false表示公开路径
+     */
     private boolean requiresAuthentication(String uri) {
+        // 打印调试信息
         System.out.println("   🧐 检查路径是否需要认证: " + uri);
 
-        // 这些是公开路径（不需要认证）
+        // ==================== 1. 公开路径白名单 ====================
+        // 这些路径完全不需要认证（完全匹配）
         String[] publicPaths = {
                 "/user/loginCheck",
                 "/user/insertUser",
@@ -91,22 +99,34 @@ public class JwtFilter extends OncePerRequestFilter {
                 "/user/checkToken",
         };
 
-        for (String path : publicPaths) {
-            if (uri.equals(path)) {
-                System.out.println("   ✅ 是公开路径: " + path);
-                return false;
+        // 检查是否在公开路径白名单中
+        for (String publicPath : publicPaths) {
+            if (uri.equals(publicPath)) {
+                System.out.println("   ✅ 是公开路径（白名单）: " + publicPath);
+                return false;  // 不需要认证
             }
         }
 
-        // 所有其他 /user/ 开头的路径都需要认证
-        if (uri.startsWith("/user/")) {
-            System.out.println("   🔒 需要认证: " + uri);
-            return true;
+        // ==================== 2. 需要认证的模块 ====================
+        // 定义所有需要认证的模块前缀
+        String[] securedModules = {
+                "/user/",    // 用户模块（除白名单外）
+                "/friend/",  // 好友模块
+                "/conv/",    // 会话模块
+                "/message/"  // 消息模块
+        };
+
+        // 检查是否属于需要认证的模块
+        for (String module : securedModules) {
+            if (uri.startsWith(module)) {
+                System.out.println("   🔒 需要认证（" + module + "模块）: " + uri);
+                return true;  // 需要认证
+            }
         }
 
-        // 其他模块...
-        return uri.startsWith("/friend/")
-                || uri.startsWith("/conv/")
-                || uri.startsWith("/message/");
+        // ==================== 3. 默认处理 ====================
+        // 不属于任何模块的路径（如静态资源、健康检查等）
+        System.out.println("   ✅ 公开路径（默认）: " + uri);
+        return false;  // 默认不需要认证
     }
 }

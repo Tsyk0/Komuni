@@ -34,3 +34,15 @@ file:
     path: ${FILE_UPLOAD_PATH:./uploads/}
     max-size: 10MB
     allowed-types: image/jpeg,image/png,application/pdf
+
+knife4j:
+  enable: true
+  # 生产环境建议关闭
+  production: false
+  # 开启增强功能
+  setting:
+    language: zh-CN
+    enable-footer-custom: true
+    footer-custom-content: Tsyk0
+    enable-swagger-models: true
+    swagger-model-name: 实体类列表
