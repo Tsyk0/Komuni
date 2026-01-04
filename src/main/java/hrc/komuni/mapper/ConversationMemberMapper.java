@@ -1,6 +1,7 @@
 package hrc.komuni.mapper;
 
 import hrc.komuni.entity.ConversationMember;
+import hrc.komuni.entity.Conversation;
 import org.apache.ibatis.annotations.*;
 
 import java.util.List;
@@ -71,4 +72,55 @@ public interface ConversationMemberMapper {
     @Select("SELECT last_read_msg_seq FROM conversation_member WHERE conv_id = #{convId} AND user_id = #{userId}")
     Long getLastReadSeq(@Param("userId") Long userId,
                         @Param("convId") Long convId);
+
+    // ============ 新增的方法 ============
+
+    /**
+     * 在conversationMember表中查找所有含有对应UserId的ConvId
+     */
+    @Select("SELECT DISTINCT conv_id FROM conversation_member WHERE user_id = #{userId} AND member_status = 1")
+    List<Long> selectConvIdsByUserId(@Param("userId") Long userId);
+
+    /**
+     * 获取对应convId, userId的用户对该conv设置的别名
+     */
+    @Select("SELECT private_display_name FROM conversation_member " +
+            "WHERE conv_id = #{convId} AND user_id = #{userId} AND member_status = 1")
+    String getPrivateDisplayName(@Param("convId") Long convId, @Param("userId") Long userId);
+
+    // ============ 新增的会话相关方法（替代ConversationService依赖） ============
+
+    /**
+     * 查询会话信息
+     */
+    @Select("SELECT * FROM conversation WHERE conv_id = #{convId}")
+    Conversation selectConversationByConvId(@Param("convId") Long convId);
+
+    /**
+     * 创建单聊会话
+     */
+    @Insert("INSERT INTO conversation (conv_type, conv_status, max_member_count, current_member_count, enable_read_receipt, create_time) " +
+            "VALUES (1, 1, 2, 0, 1, NOW())")
+    @Options(useGeneratedKeys = true, keyProperty = "convId")
+    int createSingleConversation(Conversation conversation);
+
+    /**
+     * 创建群聊会话
+     */
+    @Insert("INSERT INTO conversation (conv_type, conv_name, conv_owner_id, conv_status, max_member_count, current_member_count, enable_read_receipt, create_time) " +
+            "VALUES (2, #{convName}, #{ownerId}, 1, 500, 0, 1, NOW())")
+    @Options(useGeneratedKeys = true, keyProperty = "convId")
+    int createGroupConversation(@Param("convName") String convName, @Param("ownerId") Long ownerId);
+
+    /**
+     * 增加成员计数
+     */
+    @Update("UPDATE conversation SET current_member_count = current_member_count + 1 WHERE conv_id = #{convId}")
+    int incrementMemberCount(@Param("convId") Long convId);
+
+    /**
+     * 减少成员计数
+     */
+    @Update("UPDATE conversation SET current_member_count = current_member_count - 1 WHERE conv_id = #{convId}")
+    int decrementMemberCount(@Param("convId") Long convId);
 }

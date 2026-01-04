@@ -4,6 +4,10 @@ import hrc.komuni.entity.Conversation;
 import hrc.komuni.entity.ConversationMember;
 import hrc.komuni.response.ApiResponse;
 import hrc.komuni.service.ConversationService;
+import hrc.komuni.service.ConversationMemberService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,14 +16,18 @@ import java.util.List;
 @CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/conversation")
+@Tag(name = "会话管理", description = "会话相关的操作接口")
 public class ConversationController {
     @Autowired
     ConversationService conversationService;
 
-    // ... 保留所有现有方法 ...
+    @Autowired
+    ConversationMemberService conversationMemberService;
 
     @GetMapping("/selectByConvId")
-    public ApiResponse<Conversation> selectByConvId(@RequestParam Long convId) {
+    @Operation(summary = "查询会话信息", description = "根据会话ID查询会话详细信息")
+    public ApiResponse<Conversation> selectByConvId(
+            @Parameter(description = "会话ID", required = true) @RequestParam Long convId) {
         try {
             Conversation conv = conversationService.selectConversationByConvId(convId);
             if (conv == null) {
@@ -32,9 +40,11 @@ public class ConversationController {
     }
 
     @GetMapping("/selectConvIdsByUserId")
-    public ApiResponse<List<Long>> selectConvIdsByUserId(@RequestParam Long userId) {
+    @Operation(summary = "查询用户参与的会话ID", description = "根据用户ID查询该用户参与的所有会话ID列表")
+    public ApiResponse<List<Long>> selectConvIdsByUserId(
+            @Parameter(description = "用户ID", required = true) @RequestParam Long userId) {
         try {
-            List<Long> convIds = conversationService.selectConvIdsByUserId(userId);
+            List<Long> convIds = conversationMemberService.selectConvIdsByUserId(userId);
             return ApiResponse.success("查询成功", convIds);
         } catch (Exception e) {
             return ApiResponse.serverError("查询用户会话失败: " + e.getMessage());
@@ -42,7 +52,9 @@ public class ConversationController {
     }
 
     @GetMapping("/getConversationsByUserId")
-    public ApiResponse<List<Conversation>> getConversationsByUserId(@RequestParam Long userId) {
+    @Operation(summary = "查询用户的会话列表", description = "根据用户ID查询该用户参与的所有会话详情列表")
+    public ApiResponse<List<Conversation>> getConversationsByUserId(
+            @Parameter(description = "用户ID", required = true) @RequestParam Long userId) {
         try {
             List<Conversation> conversations = conversationService.getConversationsByUserId(userId);
             return ApiResponse.success("查询成功", conversations);
@@ -52,11 +64,12 @@ public class ConversationController {
     }
 
     @GetMapping("/getConvName")
+    @Operation(summary = "获取会话显示名称", description = "获取会话的显示名称，单聊时返回对方昵称，群聊时返回群聊名称")
     public ApiResponse<String> getConvName(
-            @RequestParam Long convId,
-            @RequestParam Long userId) {
+            @Parameter(description = "会话ID", required = true) @RequestParam Long convId,
+            @Parameter(description = "用户ID", required = true) @RequestParam Long userId) {
         try {
-            String privateName = conversationService.getPrivateDisplayName(convId, userId);
+            String privateName = conversationMemberService.getPrivateDisplayName(convId, userId);
             if (privateName != null) {
                 return ApiResponse.success("查询成功", privateName);
             }
@@ -68,11 +81,12 @@ public class ConversationController {
     }
 
     @PostMapping("/createSingleConversation")
+    @Operation(summary = "创建单聊会话", description = "创建两个用户之间的单聊会话，如果已存在则返回现有会话")
     public ApiResponse<Long> createSingleConversation(
-            @RequestParam Long user1Id,
-            @RequestParam Long user2Id) {
+            @Parameter(description = "用户1ID", required = true) @RequestParam Long user1Id,
+            @Parameter(description = "用户2ID", required = true) @RequestParam Long user2Id) {
         try {
-            Long convId = conversationService.createSingleConversation(user1Id, user2Id);
+            Long convId = conversationMemberService.createSingleConversation(user1Id, user2Id);
             return ApiResponse.success("创建单聊会话成功", convId);
         } catch (Exception e) {
             return ApiResponse.serverError("创建单聊会话失败: " + e.getMessage());
@@ -80,11 +94,12 @@ public class ConversationController {
     }
 
     @PostMapping("/createGroupConversation")
+    @Operation(summary = "创建群聊会话", description = "创建新的群聊会话，创建者自动成为群主")
     public ApiResponse<Long> createGroupConversation(
-            @RequestParam Long ownerId,
-            @RequestParam String convName) {
+            @Parameter(description = "群主ID", required = true) @RequestParam Long ownerId,
+            @Parameter(description = "群聊名称", required = true) @RequestParam String convName) {
         try {
-            Long convId = conversationService.createGroupConversation(ownerId, convName);
+            Long convId = conversationMemberService.createGroupConversation(ownerId, convName);
             return ApiResponse.success("创建群聊会话成功", convId);
         } catch (Exception e) {
             return ApiResponse.serverError("创建群聊会话失败: " + e.getMessage());
@@ -92,12 +107,13 @@ public class ConversationController {
     }
 
     @PostMapping("/addMember")
+    @Operation(summary = "添加成员到会话", description = "将用户添加到指定的会话中")
     public ApiResponse<String> addMember(
-            @RequestParam Long convId,
-            @RequestParam Long userId,
-            @RequestParam(required = false) String memberNickname) {
+            @Parameter(description = "会话ID", required = true) @RequestParam Long convId,
+            @Parameter(description = "用户ID", required = true) @RequestParam Long userId,
+            @Parameter(description = "成员昵称", required = false) @RequestParam(required = false) String memberNickname) {
         try {
-            int result = conversationService.addMemberToConversation(convId, userId, memberNickname);
+            int result = conversationMemberService.addMemberToConversation(convId, userId, memberNickname);
             if (result > 0) {
                 return ApiResponse.success("添加成员成功");
             } else {
@@ -109,9 +125,11 @@ public class ConversationController {
     }
 
     @GetMapping("/getMembers")
-    public ApiResponse<List<ConversationMember>> getMembers(@RequestParam Long convId) {
+    @Operation(summary = "查询会话成员列表", description = "根据会话ID查询该会话的所有成员信息")
+    public ApiResponse<List<ConversationMember>> getMembers(
+            @Parameter(description = "会话ID", required = true) @RequestParam Long convId) {
         try {
-            List<ConversationMember> members = conversationService.getMembersByConvId(convId);
+            List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);
             return ApiResponse.success("查询成功", members);
         } catch (Exception e) {
             return ApiResponse.serverError("查询成员失败: " + e.getMessage());
@@ -119,7 +137,9 @@ public class ConversationController {
     }
 
     @GetMapping("/getMemberCount")
-    public ApiResponse<Integer> getMemberCount(@RequestParam Long convId) {
+    @Operation(summary = "查询会话成员数量", description = "获取指定会话的成员总数")
+    public ApiResponse<Integer> getMemberCount(
+            @Parameter(description = "会话ID", required = true) @RequestParam Long convId) {
         try {
             Integer count = conversationService.getMemberCount(convId);
             return ApiResponse.success("查询成功", count);
@@ -129,11 +149,12 @@ public class ConversationController {
     }
 
     @DeleteMapping("/removeMember")
+    @Operation(summary = "移除会话成员", description = "将用户从指定的会话中移除")
     public ApiResponse<String> removeMember(
-            @RequestParam Long convId,
-            @RequestParam Long userId) {
+            @Parameter(description = "会话ID", required = true) @RequestParam Long convId,
+            @Parameter(description = "用户ID", required = true) @RequestParam Long userId) {
         try {
-            int result = conversationService.removeMember(convId, userId);
+            int result = conversationMemberService.removeMember(convId, userId);
             if (result > 0) {
                 return ApiResponse.success("移除成员成功");
             } else {
@@ -144,11 +165,11 @@ public class ConversationController {
         }
     }
 
-    // 新增：更新群聊的已读回执设置
     @PostMapping("/updateReadReceiptSetting")
+    @Operation(summary = "更新已读回执设置", description = "更新群聊的消息已读回执设置（仅群聊可用）")
     public ApiResponse<String> updateReadReceiptSetting(
-            @RequestParam Long convId,
-            @RequestParam Boolean enableReadReceipt) {
+            @Parameter(description = "会话ID", required = true) @RequestParam Long convId,
+            @Parameter(description = "是否启用已读回执", required = true) @RequestParam Boolean enableReadReceipt) {
         try {
             int result = conversationService.updateReadReceiptSetting(convId, enableReadReceipt);
             if (result > 0) {
@@ -163,9 +184,10 @@ public class ConversationController {
         }
     }
 
-    // 新增：查询群聊的已读回执设置
     @GetMapping("/getReadReceiptSetting")
-    public ApiResponse<Boolean> getReadReceiptSetting(@RequestParam Long convId) {
+    @Operation(summary = "查询已读回执设置", description = "查询群聊的消息已读回执设置状态")
+    public ApiResponse<Boolean> getReadReceiptSetting(
+            @Parameter(description = "会话ID", required = true) @RequestParam Long convId) {
         try {
             Boolean setting = conversationService.getReadReceiptSetting(convId);
             return ApiResponse.success("查询成功", setting);

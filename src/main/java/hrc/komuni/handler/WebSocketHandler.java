@@ -22,7 +22,6 @@ import java.util.Set;
 @Component
 public class WebSocketHandler extends TextWebSocketHandler {
 
-
     @Autowired
     private FileAttachmentService fileAttachmentService;
 
@@ -37,6 +36,9 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
     @Autowired
     private MessageReadStatusService messageReadStatusService;
+
+    @Autowired  // 新增：注入 ConversationMemberService
+    private ConversationMemberService conversationMemberService;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -56,8 +58,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
         // 更新用户在线状态
         userService.updateOnlineStatus(userId, 1);
 
-        // 更新最后阅读时间
-        conversationService.updateLastReadTime(convId, userId);
+        // 更新最后阅读时间 - 改为调用 ConversationMemberService
+        conversationMemberService.updateLastReadTime(convId, userId);
 
         System.out.println("用户 " + userId + " 已连接到会话 " + convId);
     }
@@ -130,8 +132,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
         // 统一使用 message_read_status 表记录已读
         messageReadStatusService.markMessageAsRead(messageId, userId);
 
-        // 更新用户的最后阅读时间
-        conversationService.updateLastReadTime(convId, userId);
+        // 更新用户的最后阅读时间 - 改为调用 ConversationMemberService
+        conversationMemberService.updateLastReadTime(convId, userId);
 
         // 构建响应
         JSONObject responseJson = new JSONObject();
@@ -146,7 +148,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
             responseJson.put("totalMembers", totalMembers);
 
             // 推送给群成员（显示已读人数更新）
-            List<ConversationMember> members = conversationService.getMembersByConvId(convId);
+            // 注意：这里需要使用 ConversationMemberService 获取成员列表
+            List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);
             for (ConversationMember member : members) {
                 if (!member.getUserId().equals(userId)) {
                     Set<WebSocketSession> memberSessions = WebSocketSessionManager.getUserSessions(member.getUserId());
@@ -268,8 +271,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
      * 群聊消息推送
      */
     private void pushMessageToGroupChat(Long convId, Long senderId, JSONObject messageJson) {
-        // 获取会话的所有成员
-        List<ConversationMember> members = conversationService.getMembersByConvId(convId);
+        // 获取会话的所有成员 - 改为使用 ConversationMemberService
+        List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);
 
         // 构建推送消息
         JSONObject pushJson = new JSONObject();
@@ -332,8 +335,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
                     }
                 }
             } else {
-                // 群聊：推送给所有成员
-                List<ConversationMember> members = conversationService.getMembersByConvId(convId);
+                // 群聊：推送给所有成员 - 改为使用 ConversationMemberService
+                List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);
                 for (ConversationMember member : members) {
                     Set<WebSocketSession> memberSessions = WebSocketSessionManager.getUserSessions(member.getUserId());
                     for (WebSocketSession memberSession : memberSessions) {
@@ -352,7 +355,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
      * 验证用户是否在会话中
      */
     private boolean validateUserInConversation(Long userId, Long convId) {
-        List<ConversationMember> members = conversationService.getMembersByConvId(convId);
+        // 改为使用 ConversationMemberService 验证
+        List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);
         for (ConversationMember member : members) {
             if (member.getUserId().equals(userId) && member.getMemberStatus() == 1) {
                 return true;
@@ -535,7 +539,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
     // 群聊文件消息推送
     private void pushFileMessageToGroupChat(Long convId, Long senderId, JSONObject messageJson) {
-        List<ConversationMember> members = conversationService.getMembersByConvId(convId);
+        // 改为使用 ConversationMemberService 获取成员列表
+        List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);
 
         JSONObject pushJson = new JSONObject();
         pushJson.put("action", "newFileMessage");
@@ -563,5 +568,4 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
         System.out.println("群聊文件消息已推送给 " + deliveredCount + " 个在线用户");
     }
-
 }

@@ -1,9 +1,11 @@
-// FileAttachmentController.java
 package hrc.komuni.controller;
 
 import hrc.komuni.entity.FileAttachment;
 import hrc.komuni.response.ApiResponse;
 import hrc.komuni.service.FileAttachmentService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -15,15 +17,17 @@ import java.util.Map;
 @CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/file")
+@Tag(name = "文件管理", description = "文件上传、下载和管理相关的操作接口")
 public class FileAttachmentController {
     @Autowired
     FileAttachmentService fileAttachmentService;
 
     @PostMapping("/upload")
+    @Operation(summary = "上传文件", description = "上传文件并关联到指定的会话和发送者")
     public ApiResponse<Map<String, Object>> uploadFile(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam("convId") Long convId,
-            @RequestParam("senderId") Long senderId) {
+            @Parameter(description = "上传的文件", required = true) @RequestParam("file") MultipartFile file,
+            @Parameter(description = "会话ID", required = true) @RequestParam("convId") Long convId,
+            @Parameter(description = "发送者ID", required = true) @RequestParam("senderId") Long senderId) {
         try {
             if (file.isEmpty()) {
                 return ApiResponse.badRequest("文件不能为空");
@@ -48,7 +52,9 @@ public class FileAttachmentController {
     }
 
     @GetMapping("/download/{fileId}")
-    public ApiResponse<String> downloadFile(@PathVariable Long fileId) {
+    @Operation(summary = "获取文件下载路径", description = "根据文件ID获取文件的存储路径用于下载")
+    public ApiResponse<String> downloadFile(
+            @Parameter(description = "文件ID", required = true) @PathVariable Long fileId) {
         try {
             String filePath = fileAttachmentService.getFilePath(fileId);
             if (filePath == null) {

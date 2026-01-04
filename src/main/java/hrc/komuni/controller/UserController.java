@@ -5,6 +5,9 @@ import hrc.komuni.response.ApiResponse;
 import hrc.komuni.service.UserService;
 import hrc.komuni.util.JwtUtil;
 import io.jsonwebtoken.Claims;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,6 +19,7 @@ import java.util.Map;
 @CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/user")
+@Tag(name = "用户管理", description = "用户注册、登录、信息管理等操作接口")
 public class UserController {
 
     @Autowired
@@ -34,12 +38,10 @@ public class UserController {
 
         String token = authHeader.trim();
 
-        // 去除Bearer前缀（如果存在）
         if (token.startsWith("Bearer ")) {
             token = token.substring(7).trim();
         }
 
-        // 检查Token是否为空
         if (token.isEmpty()) {
             return null;
         }
@@ -60,6 +62,7 @@ public class UserController {
     }
 
     @GetMapping("/debugInjection")
+    @Operation(summary = "依赖注入调试", description = "调试用户服务和JWT工具的依赖注入状态")
     public ApiResponse<Map<String, Object>> debugInjection() {
         Map<String, Object> data = new HashMap<>();
 
@@ -72,7 +75,6 @@ public class UserController {
                 data.put("jwtUtilWorks", true);
                 data.put("testToken", testToken);
 
-                // 测试Token信息
                 Claims claims = jwtUtil.parseToken(testToken);
                 data.put("testTokenUserId", claims.getSubject());
                 data.put("testTokenExpiration", claims.getExpiration());
@@ -88,7 +90,9 @@ public class UserController {
     }
 
     @GetMapping("/selectUserByUserId")
-    public ApiResponse<User> selectUserByUserId(@RequestParam Long userId) {
+    @Operation(summary = "查询用户信息", description = "根据用户ID查询用户的详细信息")
+    public ApiResponse<User> selectUserByUserId(
+            @Parameter(description = "用户ID", required = true) @RequestParam Long userId) {
         try {
             User user = userService.selectUserByUserId(userId);
             if (user == null) {
@@ -101,7 +105,9 @@ public class UserController {
     }
 
     @PostMapping("/insertUser")
-    public ApiResponse<Long> insertUser(@RequestBody User user) {
+    @Operation(summary = "用户注册", description = "注册新用户账号")
+    public ApiResponse<Long> insertUser(
+            @Parameter(description = "用户信息", required = true) @RequestBody User user) {
         try {
             Long userId = userService.insertUser(user);
             if (userId == 0) {
@@ -118,7 +124,9 @@ public class UserController {
     }
 
     @PostMapping(value = "/loginCheck", consumes = "application/json")
-    public ApiResponse<Map<String, Object>> loginCheck(@RequestBody Map<String, String> loginRequest) {
+    @Operation(summary = "用户登录", description = "用户登录验证，成功返回JWT Token")
+    public ApiResponse<Map<String, Object>> loginCheck(
+            @Parameter(description = "登录请求参数", required = true) @RequestBody Map<String, String> loginRequest) {
         try {
 
             Long userId = Long.parseLong(loginRequest.get("userId"));
@@ -129,20 +137,17 @@ public class UserController {
             }
 
             if (userService.checkUserPwd(userId, userPwd)) {
-                // 生成纯Token（不包含Bearer）
                 String token = jwtUtil.generateToken(userId);
 
                 User user = userService.selectUserByUserId(userId);
 
-                // 更新在线状态
                 userService.updateOnlineStatus(userId, 1);
 
                 Map<String, Object> data = new HashMap<>();
-                data.put("token", token);  // 只返回纯Token
+                data.put("token", token);
                 data.put("userId", userId);
                 data.put("user", user);
 
-                // 添加Token详细信息（用于调试）
                 Claims claims = jwtUtil.parseToken(token);
                 Map<String, Object> tokenInfo = new HashMap<>();
                 tokenInfo.put("issuedAt", claims.getIssuedAt());
@@ -167,9 +172,10 @@ public class UserController {
     }
 
     @PostMapping("/updateUserPwdByUserId")
+    @Operation(summary = "修改密码", description = "修改指定用户的登录密码")
     public ApiResponse<String> updateUserPwdByUserId(
-            @RequestParam Long userId,
-            @RequestParam String newPwd) {
+            @Parameter(description = "用户ID", required = true) @RequestParam Long userId,
+            @Parameter(description = "新密码", required = true) @RequestParam String newPwd) {
         try {
             String result = userService.updateUserPwdByUserId(userId, newPwd);
             return ApiResponse.success(result);
@@ -179,14 +185,16 @@ public class UserController {
     }
 
     @GetMapping("/checkToken")
-    public ApiResponse<Map<String, Object>> checkToken(@RequestHeader("Authorization") String authHeader) {
+    @Operation(summary = "验证Token有效性", description = "验证JWT Token是否有效和未过期")
+    public ApiResponse<Map<String, Object>> checkToken(
+            @Parameter(description = "Authorization头", required = true) @RequestHeader("Authorization") String authHeader) {
         try {
             System.out.println("\n\n==========================================");
             System.out.println("🚀 checkToken 接口被调用");
             System.out.println("==========================================");
             System.out.println("📥 收到的 Authorization 头原始值:");
             System.out.println("   \"" + authHeader + "\"");
-            // 使用统一方法提取和验证Token
+
             Claims claims = validateAndParseToken(authHeader);
 
             System.out.println("\n\n==========================================");
@@ -210,7 +218,6 @@ public class UserController {
 
             return ApiResponse.success("Token 有效", data);
         } catch (io.jsonwebtoken.ExpiredJwtException e) {
-            // 处理过期Token的特殊情况
             Map<String, Object> expiredData = new HashMap<>();
             expiredData.put("valid", false);
             expiredData.put("userId", e.getClaims().getSubject());
@@ -230,9 +237,10 @@ public class UserController {
     }
 
     @GetMapping("/getUserIdByToken")
-    public ApiResponse<Long> getUserIdByToken(@RequestHeader("Authorization") String authHeader) {
+    @Operation(summary = "从Token获取用户ID", description = "从JWT Token中解析出用户ID")
+    public ApiResponse<Long> getUserIdByToken(
+            @Parameter(description = "Authorization头", required = true) @RequestHeader("Authorization") String authHeader) {
         try {
-            // 使用统一方法提取和验证Token
             Claims claims = validateAndParseToken(authHeader);
 
             Long userId = Long.parseLong(claims.getSubject());
@@ -249,7 +257,9 @@ public class UserController {
     }
 
     @PostMapping("/updateUserAllAttriByUserId")
-    public ApiResponse<String> updateUserAllAttriByUserId(@RequestBody User user) {
+    @Operation(summary = "更新用户信息", description = "更新用户的全部个人信息")
+    public ApiResponse<String> updateUserAllAttriByUserId(
+            @Parameter(description = "用户信息", required = true) @RequestBody User user) {
         try {
             String result = userService.updateUserAllAttriByUserId(user);
             return ApiResponse.success(result);
@@ -259,9 +269,10 @@ public class UserController {
     }
 
     @GetMapping("/selectUsersCondition")
+    @Operation(summary = "条件搜索用户", description = "根据关键词搜索用户（支持昵称和ID模糊搜索）")
     public ApiResponse<List<User>> selectUsersCondition(
-            @RequestParam String key,
-            @RequestParam Integer amount) {
+            @Parameter(description = "搜索关键词", required = true) @RequestParam String key,
+            @Parameter(description = "返回数量限制", required = true) @RequestParam Integer amount) {
         try {
             List<User> users = userService.selectUsersCondition(key, amount);
             return ApiResponse.success("查询成功", users);
@@ -271,6 +282,7 @@ public class UserController {
     }
 
     @GetMapping("/testJwt")
+    @Operation(summary = "JWT功能测试", description = "测试JWT Token生成和验证功能")
     public ApiResponse<Map<String, Object>> testJwt() {
         try {
             Long testUserId = 123L;
@@ -279,7 +291,7 @@ public class UserController {
 
             Map<String, Object> data = new HashMap<>();
             data.put("token", token);
-            data.put("tokenWithBearer", "Bearer " + token);  // 示例：如何添加Bearer前缀
+            data.put("tokenWithBearer", "Bearer " + token);
             data.put("userId", claims.getSubject());
             data.put("expiresAt", claims.getExpiration());
             data.put("isValid", jwtUtil.validateToken(token, String.valueOf(testUserId)));
@@ -291,32 +303,30 @@ public class UserController {
     }
 
     @PostMapping("/refreshToken")
-    public ApiResponse<Map<String, Object>> refreshToken(@RequestHeader("Authorization") String authHeader) {
+    @Operation(summary = "刷新Token", description = "使用旧的Token刷新生成新的有效Token")
+    public ApiResponse<Map<String, Object>> refreshToken(
+            @Parameter(description = "Authorization头", required = true) @RequestHeader("Authorization") String authHeader) {
         try {
             String token = extractTokenFromHeader(authHeader);
             if (token == null) {
                 return ApiResponse.unauthorized("需要提供Token");
             }
 
-            // 尝试解析Token（即使过期也可以解析）
             Claims claims;
             try {
                 claims = jwtUtil.parseToken(token);
             } catch (io.jsonwebtoken.ExpiredJwtException e) {
-                // 如果Token过期，从异常中获取claims
                 claims = e.getClaims();
             }
 
             Long userId = Long.parseLong(claims.getSubject());
 
-            // 生成新Token
             String newToken = jwtUtil.generateToken(userId);
 
             Map<String, Object> data = new HashMap<>();
-            data.put("token", newToken);  // 只返回纯Token
+            data.put("token", newToken);
             data.put("userId", userId);
 
-            // 添加新Token的信息
             Claims newClaims = jwtUtil.parseToken(newToken);
             Map<String, Object> tokenInfo = new HashMap<>();
             tokenInfo.put("issuedAt", newClaims.getIssuedAt());
@@ -331,6 +341,4 @@ public class UserController {
             return ApiResponse.unauthorized("刷新Token失败: " + e.getMessage());
         }
     }
-
-
 }
