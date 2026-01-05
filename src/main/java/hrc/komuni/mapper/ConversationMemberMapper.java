@@ -9,6 +9,7 @@ import java.util.List;
 @Mapper
 public interface ConversationMemberMapper {
 
+    // 1. 查询相关方法
     @Select("SELECT * FROM conversation_member " +
             "WHERE conv_id = #{convId} AND user_id = #{userId}")
     ConversationMember selectByConvIdAndUserId(
@@ -22,15 +23,28 @@ public interface ConversationMemberMapper {
     @Select("SELECT * FROM conversation_member WHERE user_id = #{userId} AND member_status = 1")
     List<ConversationMember> selectByUserId(@Param("userId") Long userId);
 
-    @Insert("INSERT INTO conversation_member (" +
-            "conv_id, user_id, member_nickname, member_role, member_status, " +
-            "private_display_name, join_time" +
-            ") VALUES (" +
-            "#{convId}, #{userId}, #{memberNickname}, #{memberRole}, #{memberStatus}, " +
-            "#{privateDisplayName}, #{joinTime}" +
-            ")")
-    int insertConversationMember(ConversationMember member);
+    @Select("SELECT last_read_message_id FROM conversation_member WHERE conv_id = #{convId} AND user_id = #{userId}")
+    Long getLastReadSeq(@Param("userId") Long userId,
+                        @Param("convId") Long convId);
 
+    @Select("SELECT private_display_name FROM conversation_member " +
+            "WHERE conv_id = #{convId} AND user_id = #{userId} AND member_status = 1")
+    String getPrivateDisplayName(@Param("convId") Long convId, @Param("userId") Long userId);
+
+    @Select("SELECT DISTINCT conv_id FROM conversation_member WHERE user_id = #{userId} AND member_status = 1")
+    List<Long> selectConvIdsByUserId(@Param("userId") Long userId);
+
+    // 2. 插入相关方法
+    @Insert("INSERT INTO conversation_member (" +
+            "conv_id, user_id, " +
+            "member_role, member_status, join_time" +
+            ") VALUES (" +
+            "#{convId}, #{userId}, " +
+            "0, 1, NOW()" +  // member_role=0（普通成员），member_status=1（正常）
+            ")")
+    int insertConversationMember(@Param("convId") Long convId, @Param("userId") Long userId);
+
+    // 3. 更新相关方法
     @Update("UPDATE conversation_member SET " +
             "member_nickname = #{memberNickname}, " +
             "member_role = #{memberRole}, " +
@@ -56,11 +70,7 @@ public interface ConversationMemberMapper {
             "WHERE conv_id = #{convId} AND user_id = #{userId}")
     int updateLastReadTime(@Param("convId") Long convId, @Param("userId") Long userId);
 
-    @Update("UPDATE conversation_member SET member_status = 0, update_time = NOW() " +
-            "WHERE conv_id = #{convId} AND user_id = #{userId}")
-    int removeMember(@Param("convId") Long convId, @Param("userId") Long userId);
-
-    @Update("UPDATE conversation_member SET last_read_msg_seq = #{seq}, last_read_time = NOW(), unread_count = 0 WHERE conv_id = #{convId} AND user_id = #{userId}")
+    @Update("UPDATE conversation_member SET last_read_message_id  = #{seq}, last_read_time = NOW(), unread_count = 0 WHERE conv_id = #{convId} AND user_id = #{userId}")
     int updateLastReadSeq(@Param("userId") Long userId,
                           @Param("convId") Long convId,
                           @Param("seq") Long seq);
@@ -69,58 +79,69 @@ public interface ConversationMemberMapper {
     int incrementUnreadCount(@Param("convId") Long convId,
                              @Param("excludeUserId") Long excludeUserId);
 
-    @Select("SELECT last_read_msg_seq FROM conversation_member WHERE conv_id = #{convId} AND user_id = #{userId}")
-    Long getLastReadSeq(@Param("userId") Long userId,
-                        @Param("convId") Long convId);
+    @Update("UPDATE conversation_member SET member_status = 0, update_time = NOW() " +
+            "WHERE conv_id = #{convId} AND user_id = #{userId}")
+    int removeMember(@Param("convId") Long convId, @Param("userId") Long userId);
 
-    // ============ 新增的方法 ============
+    @Update("UPDATE conversation SET current_member_count = current_member_count + 1 WHERE conv_id = #{convId}")
+    int incrementMemberCount(@Param("convId") Long convId);
 
-    /**
-     * 在conversationMember表中查找所有含有对应UserId的ConvId
-     */
-    @Select("SELECT DISTINCT conv_id FROM conversation_member WHERE user_id = #{userId} AND member_status = 1")
-    List<Long> selectConvIdsByUserId(@Param("userId") Long userId);
+    @Update("UPDATE conversation SET current_member_count = current_member_count - 1 WHERE conv_id = #{convId} AND current_member_count > 0")
+    int decrementMemberCount(@Param("convId") Long convId);
 
-    /**
-     * 获取对应convId, userId的用户对该conv设置的别名
-     */
-    @Select("SELECT private_display_name FROM conversation_member " +
-            "WHERE conv_id = #{convId} AND user_id = #{userId} AND member_status = 1")
-    String getPrivateDisplayName(@Param("convId") Long convId, @Param("userId") Long userId);
+    @Update("UPDATE conversation_member cm " +
+            "SET cm.unread_count = ( " +
+            "    SELECT COALESCE(MAX(m.conv_msg_seq) - ( " +
+            "        SELECT m2.conv_msg_seq FROM message m2 " +
+            "        WHERE m2.message_id = cm.last_read_message_id " +
+            "    ), 0) " +
+            "    FROM message m " +
+            "    WHERE m.conv_id = cm.conv_id " +
+            "    AND m.message_status < 3 " +  // 排除已读状态的消息
+            ") " +
+            "WHERE cm.conv_id = #{convId} AND cm.user_id = #{userId}")
+    int updateUnreadCountBasedOnLastRead(@Param("convId") Long convId,
+                                         @Param("userId") Long userId);
 
-    // ============ 新增的会话相关方法（替代ConversationService依赖） ============
+    @Update("UPDATE conversation_member cm " +
+            "JOIN ( " +
+            "    SELECT conv_id, MAX(conv_msg_seq) as max_seq " +
+            "    FROM message " +
+            "    WHERE conv_id = #{convId} " +
+            "    AND message_status < 3 " +
+            "    GROUP BY conv_id " +
+            ") latest_msg ON cm.conv_id = latest_msg.conv_id " +
+            "SET cm.unread_count = latest_msg.max_seq - COALESCE( " +
+            "    (SELECT conv_msg_seq FROM message WHERE message_id = cm.last_read_message_id), 0) " +
+            "WHERE cm.conv_id = #{convId} AND cm.member_status = 1")
+    int updateAllMembersUnreadCount(@Param("convId") Long convId);
 
-    /**
-     * 查询会话信息
-     */
-    @Select("SELECT * FROM conversation WHERE conv_id = #{convId}")
-    Conversation selectConversationByConvId(@Param("convId") Long convId);
+    // 4. 计算相关方法
+    @Select("SELECT COALESCE(MAX(m.conv_msg_seq) - COALESCE( " +
+            "    (SELECT m2.conv_msg_seq FROM message m2 WHERE m2.message_id = cm.last_read_message_id), 0), 0) " +
+            "FROM conversation_member cm " +
+            "LEFT JOIN message m ON cm.conv_id = m.conv_id " +
+            "WHERE cm.conv_id = #{convId} AND cm.user_id = #{userId} " +
+            "AND m.message_status < 3 " +
+            "GROUP BY cm.conv_id, cm.user_id")
+    Integer calculateUnreadCount(@Param("convId") Long convId,
+                                 @Param("userId") Long userId);
 
-    /**
-     * 创建单聊会话
-     */
+    // 5. 会话创建相关方法
     @Insert("INSERT INTO conversation (conv_type, conv_status, max_member_count, current_member_count, enable_read_receipt, create_time) " +
             "VALUES (1, 1, 2, 0, 1, NOW())")
     @Options(useGeneratedKeys = true, keyProperty = "convId")
     int createSingleConversation(Conversation conversation);
 
-    /**
-     * 创建群聊会话
-     */
     @Insert("INSERT INTO conversation (conv_type, conv_name, conv_owner_id, conv_status, max_member_count, current_member_count, enable_read_receipt, create_time) " +
             "VALUES (2, #{convName}, #{ownerId}, 1, 500, 0, 1, NOW())")
     @Options(useGeneratedKeys = true, keyProperty = "convId")
     int createGroupConversation(@Param("convName") String convName, @Param("ownerId") Long ownerId);
 
-    /**
-     * 增加成员计数
-     */
-    @Update("UPDATE conversation SET current_member_count = current_member_count + 1 WHERE conv_id = #{convId}")
-    int incrementMemberCount(@Param("convId") Long convId);
+    // ============ 未在Service中使用的方法（放在底端） ============
 
     /**
-     * 减少成员计数
+     * 查询会话信息
      */
-    @Update("UPDATE conversation SET current_member_count = current_member_count - 1 WHERE conv_id = #{convId}")
-    int decrementMemberCount(@Param("convId") Long convId);
+    // 此方法被注释掉了，未使用
 }

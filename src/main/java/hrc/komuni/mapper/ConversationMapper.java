@@ -11,10 +11,6 @@ public interface ConversationMapper {
         @Select("SELECT * FROM conversation WHERE conv_id = #{convId}")
         Conversation selectConversationByConvId(@Param("convId") Long convId);
 
-        @Select("SELECT DISTINCT cm.conv_id FROM conversation_member cm " +
-                        "WHERE cm.user_id = #{userId} AND cm.member_status = 1")
-        List<Long> selectConvIdsByUserId(@Param("userId") Long userId);
-
         @Select("SELECT conv_name FROM conversation WHERE conv_id = #{convId}")
         String getConvNameByConvId(@Param("convId") Long convId);
 
@@ -34,6 +30,7 @@ public interface ConversationMapper {
                         ")")
         @Options(useGeneratedKeys = true, keyProperty = "convId")
         int insertConversation(Conversation conversation);
+
 
         @Update("UPDATE conversation SET " +
                         "conv_name = #{convName}, conv_avatar = #{convAvatar}, " +
