@@ -28,10 +28,9 @@ public interface ConversationMemberService {
     int decrementMemberCount(Long convId);
     // 4. 未读消息相关方法
     int getUnreadCount(Long convId, Long userId);
-    int updateUnreadCountBasedOnLastRead(Long convId, Long userId);
+    int updateUnreadCount(Long convId, Long userId);
     int updateAllMembersUnreadCount(Long convId);
-    int calculateUnreadCount(Long convId, Long userId);
-    int syncUnreadCount(Long convId, Long userId);
+    public int setUnreadCountZero(Long convId, Long userId);
 
     // 5. 会话创建相关方法
     Long createSingleConversation(Long user1Id, Long user2Id);
@@ -39,5 +38,4 @@ public interface ConversationMemberService {
     int addMemberToConversation(Long convId, Long userId, String memberNickname);
 
     // ============ 未在Controller中使用的方法（放在底端） ============
-    int resetUnreadCount(Long convId, Long userId);
 }

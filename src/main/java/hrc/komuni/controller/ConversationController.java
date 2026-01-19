@@ -24,9 +24,9 @@ public class ConversationController {
     @Autowired
     ConversationMemberService conversationMemberService;
 
-    @GetMapping("/selectByConvId")
+    @GetMapping("/selectConversationByConvId")
     @Operation(summary = "查询会话信息", description = "根据会话ID查询会话详细信息")
-    public ApiResponse<Conversation> selectByConvId(
+    public ApiResponse<Conversation> selectConversationByConvId(
             @Parameter(description = "会话ID", required = true) @RequestParam Long convId) {
         try {
             Conversation conv = conversationService.selectConversationByConvId(convId);
@@ -106,9 +106,9 @@ public class ConversationController {
         }
     }
 
-    @PostMapping("/addMember")
+    @PostMapping("/addMemberToConversation")
     @Operation(summary = "添加成员到会话", description = "将用户添加到指定的会话中")
-    public ApiResponse<String> addMember(
+    public ApiResponse<String> addMemberToConversation(
             @Parameter(description = "会话ID", required = true) @RequestParam Long convId,
             @Parameter(description = "用户ID", required = true) @RequestParam Long userId,
             @Parameter(description = "成员昵称", required = false) @RequestParam(required = false) String memberNickname) {
@@ -124,9 +124,9 @@ public class ConversationController {
         }
     }
 
-    @GetMapping("/getMembers")
+    @GetMapping("/selectMembersByConvId")
     @Operation(summary = "查询会话成员列表", description = "根据会话ID查询该会话的所有成员信息")
-    public ApiResponse<List<ConversationMember>> getMembers(
+    public ApiResponse<List<ConversationMember>> selectMembersByConvId(
             @Parameter(description = "会话ID", required = true) @RequestParam Long convId) {
         try {
             List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);

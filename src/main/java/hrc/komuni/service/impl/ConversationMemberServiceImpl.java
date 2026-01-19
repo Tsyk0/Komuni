@@ -111,8 +111,8 @@ public class ConversationMemberServiceImpl implements ConversationMemberService 
 
     @Override
     @Transactional
-    public int updateUnreadCountBasedOnLastRead(Long convId, Long userId) {
-        return conversationMemberMapper.updateUnreadCountBasedOnLastRead(convId, userId);
+    public int updateUnreadCount(Long convId, Long userId) {
+        return conversationMemberMapper.updateUnreadCount(convId, userId);
     }
 
     @Override
@@ -121,18 +121,18 @@ public class ConversationMemberServiceImpl implements ConversationMemberService 
         return conversationMemberMapper.updateAllMembersUnreadCount(convId);
     }
 
-    @Override
-    public int calculateUnreadCount(Long convId, Long userId) {
-        Integer count = conversationMemberMapper.calculateUnreadCount(convId, userId);
-        return count != null ? count : 0;
+    /**
+     * 将未读计数设置为0（标记所有消息为已读）
+     */
+    public int setUnreadCountZero(Long convId, Long userId) {
+        try {
+            return conversationMemberMapper.setUnreadCountZero(convId, userId);
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
-    @Override
-    @Transactional
-    public int syncUnreadCount(Long convId, Long userId) {
-        int updated = conversationMemberMapper.updateUnreadCountBasedOnLastRead(convId, userId);
-        return calculateUnreadCount(convId, userId);
-    }
+
 
     // 5. 会话创建相关方法实现
     @Override
@@ -224,18 +224,7 @@ public class ConversationMemberServiceImpl implements ConversationMemberService 
     }
 
     // ============ 未在Controller中使用的方法实现（放在底端） ============
-    @Override
-    public int resetUnreadCount(Long convId, Long userId) {
-        ConversationMember member = conversationMemberMapper.selectByConvIdAndUserId(convId, userId);
-        if (member != null) {
-            Long latestMessageId = getLatestMessageId(convId);
-            if (latestMessageId != null) {
-                conversationMemberMapper.updateLastReadSeq(userId, convId, latestMessageId);
-                return syncUnreadCount(convId, userId);
-            }
-        }
-        return 0;
-    }
+
 
     // ============ 私有辅助方法（放在最底端） ============
     private Long getLatestConversationId() {

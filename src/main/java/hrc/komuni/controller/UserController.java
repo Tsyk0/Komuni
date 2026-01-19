@@ -1,5 +1,6 @@
 package hrc.komuni.controller;
-
+import hrc.komuni.util.ImageBase64Util;
+import org.springframework.beans.factory.annotation.Autowired;
 import hrc.komuni.entity.User;
 import hrc.komuni.response.ApiResponse;
 import hrc.komuni.service.UserService;
@@ -11,10 +12,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.*;
 
 @CrossOrigin(origins = "*")
 @RestController
@@ -27,6 +28,9 @@ public class UserController {
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private ImageBase64Util imageBase64Util;
 
     /**
      * 从Authorization头中提取纯Token（去掉Bearer前缀）
@@ -108,6 +112,7 @@ public class UserController {
     @Operation(summary = "用户注册", description = "注册新用户账号")
     public ApiResponse<Long> insertUser(
             @Parameter(description = "用户信息", required = true) @RequestBody User user) {
+        System.out.println("=== 用户注册 ===");
         try {
             Long userId = userService.insertUser(user);
             if (userId == 0) {
@@ -133,6 +138,7 @@ public class UserController {
             String userPwd = loginRequest.get("userPwd");
 
             if (userService.selectUserByUserId(userId) == null) {
+                System.out.println("=== 用户登录失败:acc error ===");
                 return ApiResponse.badRequest("不存在的账户");
             }
 
@@ -159,9 +165,9 @@ public class UserController {
                 System.out.println("用户ID: " + userId);
                 System.out.println("Token: " + token.substring(0, Math.min(30, token.length())) + "...");
                 System.out.println("过期时间: " + claims.getExpiration());
-
                 return ApiResponse.success("登录成功", data);
             } else {
+                System.out.println("=== 用户登录失败:pwd error ===");
                 return ApiResponse.unauthorized("账号或密码错误");
             }
         } catch (NumberFormatException e) {
@@ -171,6 +177,34 @@ public class UserController {
         }
     }
 
+    @PostMapping("/checkUserPwd")
+    @Operation(summary = "验证用户密码", description = "验证用户输入的密码是否正确")
+    public ApiResponse<String> checkUserPwd(
+            @Parameter(description = "密码验证请求参数", required = true) @RequestBody Map<String, String> checkRequest) {
+        try {
+
+            Long userId = Long.parseLong(checkRequest.get("userId"));
+            String userPwd = checkRequest.get("userPwd");
+
+            if (userService.selectUserByUserId(userId) == null) {
+                System.out.println("=== 密码验证失败:用户不存在 ===");
+                return ApiResponse.badRequest("用户不存在");
+            }
+
+            if (userService.checkUserPwd(userId, userPwd)) {
+                System.out.println("=== 密码验证成功 ===");
+                System.out.println("用户ID: " + userId);
+                return ApiResponse.success("密码正确");
+            } else {
+                System.out.println("=== 密码验证失败:密码错误 ===");
+                return ApiResponse.unauthorized("密码错误");
+            }
+        } catch (NumberFormatException e) {
+            return ApiResponse.badRequest("用户ID格式错误");
+        } catch (Exception e) {
+            return ApiResponse.serverError("密码验证失败: " + e.getMessage());
+        }
+    }
     @PostMapping("/updateUserPwdByUserId")
     @Operation(summary = "修改密码", description = "修改指定用户的登录密码")
     public ApiResponse<String> updateUserPwdByUserId(
@@ -185,39 +219,49 @@ public class UserController {
     }
 
     @GetMapping("/checkToken")
-    @Operation(summary = "验证Token有效性", description = "验证JWT Token是否有效和未过期")
+    @Operation(summary = "验证Token有效性", description = "验证JWT Token并返回完整用户信息")
     public ApiResponse<Map<String, Object>> checkToken(
             @Parameter(description = "Authorization头", required = true) @RequestHeader("Authorization") String authHeader) {
+
+        // 提取 token
+        String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+
         try {
-            System.out.println("\n\n==========================================");
-            System.out.println("🚀 checkToken 接口被调用");
-            System.out.println("==========================================");
-            System.out.println("📥 收到的 Authorization 头原始值:");
-            System.out.println("   \"" + authHeader + "\"");
+            // 解析 token
+            Claims claims = jwtUtil.parseToken(token);
 
-            Claims claims = validateAndParseToken(authHeader);
+            // 获取用户ID
+            String subject = claims.getSubject();
+            Long userId = Long.parseLong(subject);
 
-            System.out.println("\n\n==========================================");
-            System.out.println("🚀 checkToken 接口被调用");
-            System.out.println("==========================================");
-            System.out.println("📥 收到的 Authorization 头原始值:");
-            System.out.println("   \"" + authHeader + "\"");
+            // 查询用户信息
+            User user = userService.selectUserByUserId(userId);
 
-            Date expiration = claims.getExpiration();
-
-            if (expiration.before(new Date())) {
-                return ApiResponse.unauthorized("Token 已过期");
+            if (user == null) {
+                return ApiResponse.error("用户不存在"); // 不带 data 参数
             }
 
+            // 准备响应数据
             Map<String, Object> data = new HashMap<>();
-            data.put("userId", claims.getSubject());
-            data.put("expiration", expiration);
-            data.put("issuedAt", claims.getIssuedAt());
+            data.put("token", token);
+            data.put("userId", userId);
+            data.put("user", user);
+
+            // Token 信息
+            Map<String, Object> tokenInfo = new HashMap<>();
+            tokenInfo.put("issuedAt", claims.getIssuedAt());
+            tokenInfo.put("expiration", claims.getExpiration());
+            tokenInfo.put("expiresInSeconds", (claims.getExpiration().getTime() - System.currentTimeMillis()) / 1000);
+            data.put("tokenInfo", tokenInfo);
+
+            // 验证状态
             data.put("valid", true);
-            data.put("remainingSeconds", (expiration.getTime() - System.currentTimeMillis()) / 1000);
+            data.put("remainingSeconds", (claims.getExpiration().getTime() - System.currentTimeMillis()) / 1000);
 
             return ApiResponse.success("Token 有效", data);
+
         } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            // Token 过期的情况 - 仍然返回成功格式，但 valid 为 false
             Map<String, Object> expiredData = new HashMap<>();
             expiredData.put("valid", false);
             expiredData.put("userId", e.getClaims().getSubject());
@@ -225,14 +269,18 @@ public class UserController {
             expiredData.put("expiredSecondsAgo", (System.currentTimeMillis() - e.getClaims().getExpiration().getTime()) / 1000);
 
             return ApiResponse.success("Token 已过期", expiredData);
-        } catch (io.jsonwebtoken.SignatureException e) {
-            return ApiResponse.badRequest("Token 签名无效");
-        } catch (io.jsonwebtoken.MalformedJwtException e) {
-            return ApiResponse.badRequest("Token 格式错误");
-        } catch (IllegalArgumentException e) {
-            return ApiResponse.unauthorized("需要认证 Token: " + e.getMessage());
+
+        } catch (NumberFormatException e) {
+            // 用户ID格式错误
+            return ApiResponse.error("用户ID格式错误");
+
+        } catch (io.jsonwebtoken.SignatureException | io.jsonwebtoken.MalformedJwtException e) {
+            // Token 签名或格式错误
+            return ApiResponse.error("Token无效");
+
         } catch (Exception e) {
-            return ApiResponse.serverError("Token 校验失败: " + e.getMessage());
+            // 其他错误
+            return ApiResponse.error("Token验证失败: " + e.getMessage());
         }
     }
 
@@ -261,9 +309,58 @@ public class UserController {
     public ApiResponse<String> updateUserAllAttriByUserId(
             @Parameter(description = "用户信息", required = true) @RequestBody User user) {
         try {
+            System.out.println("=== 收到用户更新请求 ===");
+            System.out.println("用户ID: " + user.getUserId());
+            System.out.println("昵称: " + user.getUserNickname());
+            System.out.println("头像字段存在: " + (user.getUserAvatar() != null));
+
+            if (user.getUserAvatar() != null) {
+                System.out.println("头像数据前50字符: " +
+                        user.getUserAvatar().substring(0, Math.min(50, user.getUserAvatar().length())));
+            }
+
+            // 1. 获取旧头像路径（用于删除）
+            User oldUser = userService.selectUserByUserId(user.getUserId());
+            String oldAvatarPath = null;
+            if (oldUser != null) {
+                oldAvatarPath = oldUser.getUserAvatar();
+                System.out.println("旧头像路径: " + oldAvatarPath);
+            }
+
+            // 2. 处理头像（如果是base64格式）
+            String userAvatar = user.getUserAvatar();
+            if (userAvatar != null && !userAvatar.isEmpty()) {
+                if (imageBase64Util.isBase64Image(userAvatar)) {
+                    System.out.println("检测到base64图片，开始处理...");
+                    // 保存base64图片为文件，获取相对路径
+                    String newAvatarPath = imageBase64Util.saveBase64Image(userAvatar, user.getUserId());
+                    user.setUserAvatar(newAvatarPath);
+                    System.out.println("新头像路径: " + newAvatarPath);
+
+                    // 删除旧头像文件
+                    if (oldAvatarPath != null && !oldAvatarPath.isEmpty()) {
+                        imageBase64Util.deleteOldAvatar(oldAvatarPath);
+                    }
+                } else {
+                    System.out.println("头像不是base64格式，可能是已有路径: " + userAvatar);
+                }
+            } else {
+                System.out.println("未提供头像数据，保持原头像不变");
+                // 保持原头像不变
+                if (oldUser != null) {
+                    user.setUserAvatar(oldUser.getUserAvatar());
+                }
+            }
+
+            // 3. 更新用户信息
             String result = userService.updateUserAllAttriByUserId(user);
+            System.out.println("更新结果: " + result);
+
             return ApiResponse.success(result);
+
         } catch (Exception e) {
+            System.err.println("更新用户信息失败: " + e.getMessage());
+            e.printStackTrace();
             return ApiResponse.serverError("更新用户信息失败: " + e.getMessage());
         }
     }

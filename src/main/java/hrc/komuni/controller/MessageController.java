@@ -21,7 +21,7 @@ public class MessageController {
     @Autowired
     MessageService messageService;
 
-    @GetMapping("/selectByMessageId")
+    @GetMapping("/selectMessageByMessageId")
     @Operation(summary = "查询消息详情", description = "根据消息ID查询消息的详细信息")
     public ApiResponse<Message> selectByMessageId(
             @Parameter(description = "消息ID", required = true) @RequestParam Long messageId) {
@@ -74,7 +74,7 @@ public class MessageController {
         }
     }
 
-    @GetMapping("/getLastMessage")
+    @GetMapping("/getLastMessageByConvId")
     @Operation(summary = "查询最后一条消息", description = "查询指定会话的最后一条消息")
     public ApiResponse<Message> getLastMessage(
             @Parameter(description = "会话ID", required = true) @RequestParam Long convId) {

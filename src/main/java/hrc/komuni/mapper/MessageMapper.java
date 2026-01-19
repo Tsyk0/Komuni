@@ -39,7 +39,7 @@ public interface MessageMapper {
 
     @Select("SELECT * FROM message " +
             "WHERE conv_id = #{convId} AND is_recalled = 0 " +
-            "ORDER BY send_time DESC LIMIT 1")
+            "ORDER BY conv_msg_seq DESC LIMIT 1")
     Message selectLastMessageByConvId(@Param("convId") Long convId);
 
     @Insert("INSERT INTO message (" +

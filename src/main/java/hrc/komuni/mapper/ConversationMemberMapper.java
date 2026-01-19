@@ -89,20 +89,40 @@ public interface ConversationMemberMapper {
     @Update("UPDATE conversation SET current_member_count = current_member_count - 1 WHERE conv_id = #{convId} AND current_member_count > 0")
     int decrementMemberCount(@Param("convId") Long convId);
 
-    @Update("UPDATE conversation_member cm " +
-            "SET cm.unread_count = ( " +
-            "    SELECT COALESCE(MAX(m.conv_msg_seq) - ( " +
-            "        SELECT m2.conv_msg_seq FROM message m2 " +
-            "        WHERE m2.message_id = cm.last_read_message_id " +
-            "    ), 0) " +
-            "    FROM message m " +
-            "    WHERE m.conv_id = cm.conv_id " +
-            "    AND m.message_status < 3 " +  // 排除已读状态的消息
-            ") " +
-            "WHERE cm.conv_id = #{convId} AND cm.user_id = #{userId}")
-    int updateUnreadCountBasedOnLastRead(@Param("convId") Long convId,
-                                         @Param("userId") Long userId);
-
+//    @Update("UPDATE conversation_member cm " +
+//            "SET cm.unread_count = ( " +
+//            "    SELECT COALESCE(MAX(m.conv_msg_seq) - ( " +
+//            "        SELECT m2.conv_msg_seq FROM message m2 " +
+//            "        WHERE m2.message_id = cm.last_read_message_id " +
+//            "    ), 0) " +
+//            "    FROM message m " +
+//            "    WHERE m.conv_id = cm.conv_id " +
+//            "    AND m.message_status < 3 " +  // 排除已读状态的消息
+//            ") " +
+//            "WHERE cm.conv_id = #{convId} AND cm.user_id = #{userId}")
+//    int updateUnreadCountBasedOnLastRead(@Param("convId") Long convId,
+//                                         @Param("userId") Long userId);
+@Update("UPDATE conversation_member cm " +
+        "JOIN (" +
+        "    SELECT m.conv_id, " +
+        "           COUNT(*) as unread_count " +
+        "    FROM message m " +
+        "    WHERE m.conv_id = #{convId} " +
+        "    AND m.conv_msg_seq > COALESCE((" +
+        "        SELECT m2.conv_msg_seq FROM conversation_member cm2 " +
+        "        JOIN message m2 ON m2.message_id = cm2.last_read_message_id " +
+        "        WHERE cm2.conv_id = #{convId} AND cm2.user_id = #{userId}" +
+        "    ), 0) " +
+        "    AND m.sender_id != #{userId} " +
+        "    AND m.is_recalled = 0 " +
+        "    AND m.message_status >= 1 " +
+        "    GROUP BY m.conv_id" +
+        ") unread_stats ON unread_stats.conv_id = cm.conv_id " +
+        "SET cm.unread_count = COALESCE(unread_stats.unread_count, 0), " +
+        "    cm.update_time = NOW() " +
+        "WHERE cm.conv_id = #{convId} AND cm.user_id = #{userId}")
+int updateUnreadCount(@Param("convId") Long convId,
+                      @Param("userId") Long userId);
     @Update("UPDATE conversation_member cm " +
             "JOIN ( " +
             "    SELECT conv_id, MAX(conv_msg_seq) as max_seq " +
@@ -117,15 +137,19 @@ public interface ConversationMemberMapper {
     int updateAllMembersUnreadCount(@Param("convId") Long convId);
 
     // 4. 计算相关方法
-    @Select("SELECT COALESCE(MAX(m.conv_msg_seq) - COALESCE( " +
-            "    (SELECT m2.conv_msg_seq FROM message m2 WHERE m2.message_id = cm.last_read_message_id), 0), 0) " +
-            "FROM conversation_member cm " +
-            "LEFT JOIN message m ON cm.conv_id = m.conv_id " +
-            "WHERE cm.conv_id = #{convId} AND cm.user_id = #{userId} " +
-            "AND m.message_status < 3 " +
-            "GROUP BY cm.conv_id, cm.user_id")
-    Integer calculateUnreadCount(@Param("convId") Long convId,
-                                 @Param("userId") Long userId);
+// 直接将未读计数设置为0（标记为已读）
+    @Update("UPDATE conversation_member " +
+            "SET unread_count = 0, " +
+            "    last_read_time = NOW(), " +
+            "    last_read_message_id = (" +
+            "        SELECT message_id FROM message " +
+            "        WHERE conv_id = #{convId} " +
+            "        ORDER BY conv_msg_seq DESC LIMIT 1" +
+            "    ), " +
+            "    update_time = NOW() " +
+            "WHERE conv_id = #{convId} AND user_id = #{userId}")
+    int setUnreadCountZero(@Param("convId") Long convId,
+                           @Param("userId") Long userId);
 
     // 5. 会话创建相关方法
     @Insert("INSERT INTO conversation (conv_type, conv_status, max_member_count, current_member_count, enable_read_receipt, create_time) " +

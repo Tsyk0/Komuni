@@ -98,6 +98,8 @@ public class ConversationMemberController {
         }
     }
 
+//   添加set方法
+
     @GetMapping("/selectConvIdsByUserId")
     @Operation(summary = "获取用户参与的会话ID列表", description = "根据用户ID查询该用户参与的所有会话ID")
     public ApiResponse<List<Long>> selectConvIdsByUserId(
@@ -111,7 +113,7 @@ public class ConversationMemberController {
     }
 
     @GetMapping("/getUnreadCount")
-    @Operation(summary = "获取未读消息数", description = "获取用户在会话中的未读消息数")
+    @Operation(summary = "获取未读消息数", description = "获取用户在会话中的未读消息数，但仍然未实现与conversation的currentmsgseq的联动（每当收到新消息就触发一遍计算未读方法），等待后续补充")
     public ApiResponse<Integer> getUnreadCount(
             @Parameter(description = "会话ID", required = true) @RequestParam Long convId,
             @Parameter(description = "用户ID", required = true) @RequestParam Long userId) {
@@ -123,16 +125,17 @@ public class ConversationMemberController {
         }
     }
 
-    @GetMapping("/calculateUnreadCount")
-    @Operation(summary = "计算未读消息数", description = "实时计算用户在当前会话中的未读消息数")
-    public ApiResponse<Integer> calculateUnreadCount(
+    @PostMapping("/setUnreadCountZero")
+    @Operation(summary = "标记所有消息为已读", description = "将指定会话的未读消息数设置为0")
+    public ApiResponse<Integer> setUnreadCountZero(
             @Parameter(description = "会话ID", required = true) @RequestParam Long convId,
             @Parameter(description = "用户ID", required = true) @RequestParam Long userId) {
         try {
-            int unreadCount = conversationMemberService.calculateUnreadCount(convId, userId);
-            return ApiResponse.success("计算成功", unreadCount);
+            int result = conversationMemberService.setUnreadCountZero(convId, userId);
+            System.out.println("标记为已读: convId=" + convId + ", userId=" + userId + ", 结果=" + result);
+            return ApiResponse.success("标记所有消息为已读成功", result);
         } catch (Exception e) {
-            return ApiResponse.serverError("计算失败: " + e.getMessage());
+            return ApiResponse.serverError("标记为已读失败: " + e.getMessage());
         }
     }
 
@@ -272,26 +275,16 @@ public class ConversationMemberController {
         }
     }
 
-    @PostMapping("/syncUnreadCount")
-    @Operation(summary = "同步未读消息数", description = "根据最后阅读的消息同步计算未读消息数")
-    public ApiResponse<Integer> syncUnreadCount(
-            @Parameter(description = "会话ID", required = true) @RequestParam Long convId,
-            @Parameter(description = "用户ID", required = true) @RequestParam Long userId) {
-        try {
-            int unreadCount = conversationMemberService.syncUnreadCount(convId, userId);
-            return ApiResponse.success("同步成功", unreadCount);
-        } catch (Exception e) {
-            return ApiResponse.serverError("同步失败: " + e.getMessage());
-        }
-    }
 
-    @PostMapping("/updateUnreadCountBasedOnLastRead")
+
+    @PostMapping("/updateUnreadCount")
     @Operation(summary = "基于最后阅读更新未读数", description = "根据最后阅读的消息更新未读消息数")
-    public ApiResponse<Integer> updateUnreadCountBasedOnLastRead(
+    public ApiResponse<Integer> updateUnreadCount(
             @Parameter(description = "会话ID", required = true) @RequestParam Long convId,
             @Parameter(description = "用户ID", required = true) @RequestParam Long userId) {
         try {
-            int result = conversationMemberService.updateUnreadCountBasedOnLastRead(convId, userId);
+            int result = conversationMemberService.updateUnreadCount(convId, userId);
+            System.out.println(convId+"and"+userId+"updateUNREAD");
             return ApiResponse.success("更新成功", result);
         } catch (Exception e) {
             return ApiResponse.serverError("更新失败: " + e.getMessage());
@@ -355,21 +348,5 @@ public class ConversationMemberController {
         }
     }
 
-    // ============ 未在其他文件中使用的方法（放在底端） ============
-    @PostMapping("/resetUnreadCount")
-    @Operation(summary = "重置未读消息数", description = "将用户的未读消息数重置为0")
-    public ApiResponse<Integer> resetUnreadCount(
-            @Parameter(description = "会话ID", required = true) @RequestParam Long convId,
-            @Parameter(description = "用户ID", required = true) @RequestParam Long userId) {
-        try {
-            int result = conversationMemberService.resetUnreadCount(convId, userId);
-            if (result > 0) {
-                return ApiResponse.success("重置成功", result);
-            } else {
-                return ApiResponse.badRequest("重置失败，成员不存在");
-            }
-        } catch (Exception e) {
-            return ApiResponse.serverError("重置失败: " + e.getMessage());
-        }
-    }
+
 }
