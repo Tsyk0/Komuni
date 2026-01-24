@@ -69,18 +69,7 @@ public class ConversationMemberController {
         }
     }
 
-    @GetMapping("/getLastReadSeq")
-    @Operation(summary = "获取最后阅读序列号", description = "获取成员最后阅读的消息序列号")
-    public ApiResponse<Long> getLastReadSeq(
-            @Parameter(description = "用户ID", required = true) @RequestParam Long userId,
-            @Parameter(description = "会话ID", required = true) @RequestParam Long convId) {
-        try {
-            Long seq = conversationMemberService.getLastReadSeq(userId, convId);
-            return ApiResponse.success("查询成功", seq);
-        } catch (Exception e) {
-            return ApiResponse.serverError("查询失败: " + e.getMessage());
-        }
-    }
+
 
     @GetMapping("/getPrivateDisplayName")
     @Operation(summary = "获取私聊显示名称", description = "获取用户在单聊中对对方的显示名称")
@@ -113,7 +102,7 @@ public class ConversationMemberController {
     }
 
     @GetMapping("/getUnreadCount")
-    @Operation(summary = "获取未读消息数", description = "获取用户在会话中的未读消息数，但仍然未实现与conversation的currentmsgseq的联动（每当收到新消息就触发一遍计算未读方法），等待后续补充")
+    @Operation(summary = "获取未读消息数", description = "获取用户在会话中的未读消息数")
     public ApiResponse<Integer> getUnreadCount(
             @Parameter(description = "会话ID", required = true) @RequestParam Long convId,
             @Parameter(description = "用户ID", required = true) @RequestParam Long userId) {
@@ -244,23 +233,7 @@ public class ConversationMemberController {
         }
     }
 
-    @PostMapping("/updateLastReadSeq")
-    @Operation(summary = "更新最后阅读序列号", description = "更新成员最后阅读的消息序列号")
-    public ApiResponse<Integer> updateLastReadSeq(
-            @Parameter(description = "用户ID", required = true) @RequestParam Long userId,
-            @Parameter(description = "会话ID", required = true) @RequestParam Long convId,
-            @Parameter(description = "消息序列号", required = true) @RequestParam Long seq) {
-        try {
-            int result = conversationMemberService.updateLastReadSeq(userId, convId, seq);
-            if (result > 0) {
-                return ApiResponse.success("更新成功", result);
-            } else {
-                return ApiResponse.badRequest("更新失败，成员不存在");
-            }
-        } catch (Exception e) {
-            return ApiResponse.serverError("更新失败: " + e.getMessage());
-        }
-    }
+
 
     @PostMapping("/incrementUnreadCount")
     @Operation(summary = "增加未读消息数", description = "给除了指定用户外的所有会话成员增加未读消息数")

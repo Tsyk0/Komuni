@@ -9,7 +9,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Date;
+import java.util.Date;  // 添加Date导入
 import java.util.List;
 
 @Service
@@ -21,7 +21,7 @@ public class MessageServiceImpl implements MessageService {
     ConversationMemberMapper conversationMemberMapper;
 
     @Autowired
-    private JdbcTemplate jdbcTemplate;  // 新增
+    private JdbcTemplate jdbcTemplate;
 
     @Override
     public Message selectMessageByMessageId(Long messageId) {
@@ -31,27 +31,42 @@ public class MessageServiceImpl implements MessageService {
     @Override
     @Transactional
     public Long insertMessage(Message message) {
-        // 1. 生成序列号
-        Long seq = getNextSeq(message.getConvId());
-        message.setConvMsgSeq(seq);
+        // 验证必要的字段
+        if (message.getConvId() == null) {
+            throw new IllegalArgumentException("会话ID不能为空");
+        }
+        if (message.getSenderId() == null) {
+            throw new IllegalArgumentException("发送者ID不能为空");
+        }
+        if (message.getMessageType() == null || message.getMessageType().trim().isEmpty()) {
+            throw new IllegalArgumentException("消息类型不能为空");
+        }
+        if (message.getMessageContent() == null || message.getMessageContent().trim().isEmpty()) {
+            throw new IllegalArgumentException("消息内容不能为空");
+        }
+
 
         // 2. 设置默认值
         if (message.getMessageStatus() == null) {
-            message.setMessageStatus(0);
+            message.setMessageStatus(1); // 默认为已发送
         }
         if (message.getIsRecalled() == null) {
             message.setIsRecalled(false);
         }
+        if (message.getSendTime() == null) {
+            message.setSendTime(new Date());
+        }
 
-        // 3. 保存消息
+        // 3. 验证发送者是否在会话中
+        validateSenderInConversation(message.getConvId(), message.getSenderId());
+
+        // 4. 保存消息
         int result = messageMapper.insertMessage(message);
 
-        // 4. 更新未读数
+        // 5. 更新未读数（排除发送者自己）
         if (result > 0) {
-            conversationMemberMapper.incrementUnreadCount(
-                    message.getConvId(),
-                    message.getSenderId()
-            );
+            // 这里先使用原有的方法，稍后修复
+            incrementUnreadCountForOtherMembers(message.getConvId(), message.getSenderId());
         }
 
         return message.getMessageId();
@@ -60,38 +75,71 @@ public class MessageServiceImpl implements MessageService {
     /**
      * 私有方法：获取下一个序列号
      */
-    @Transactional
-    public synchronized Long getNextSeq(Long convId) {
+
+    /**
+     * 确保会话存在，如果不存在则创建默认会话
+     */
+    private void ensureConversationExists(Long convId) {
         try {
-            Long currentSeq = jdbcTemplate.queryForObject(
-                    "SELECT current_msg_seq FROM conversation WHERE conv_id = ? FOR UPDATE",
-                    Long.class, convId
+            // 检查会话是否存在
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM conversation WHERE conv_id = ?",
+                    Integer.class, convId
             );
 
-            if (currentSeq == null) {
-                currentSeq = 0L;
+            if (count == null || count == 0) {
+                // 会话不存在，创建默认会话
+                // 这里需要确定会话类型，默认设为单聊(1)
+                // 需要设置所有NOT NULL字段
+                jdbcTemplate.update(
+                        "INSERT INTO conversation (conv_id, conv_type, conv_name, conv_status) VALUES (?, 1, '默认会话', 1)",
+                        convId
+                );
+                System.out.println("创建默认会话: convId=" + convId);
             }
-
-            Long nextSeq = currentSeq + 1;
-
-            jdbcTemplate.update(
-                    "UPDATE conversation SET current_msg_seq = ? WHERE conv_id = ?",
-                    nextSeq, convId
-            );
-
-            return nextSeq;
-
         } catch (Exception e) {
-            // 创建记录并返回1
-            jdbcTemplate.update(
-                    "INSERT INTO conversation (conv_id, current_msg_seq) VALUES (?, 1) " +
-                            "ON DUPLICATE KEY UPDATE current_msg_seq = 1",
-                    convId
-            );
-            return 1L;
+            throw new RuntimeException("检查会话失败: " + e.getMessage(), e);
         }
     }
 
+    /**
+     * 验证发送者是否在会话中
+     */
+    private void validateSenderInConversation(Long convId, Long senderId) {
+        try {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM conversation_member WHERE conv_id = ? AND user_id = ? AND member_status = 1",
+                    Integer.class, convId, senderId
+            );
+
+            if (count == null || count == 0) {
+                throw new IllegalArgumentException("发送者不在该会话中或无发言权限");
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("验证发送者权限失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 为其他成员增加未读计数（排除发送者自己）
+     */
+    private void incrementUnreadCountForOtherMembers(Long convId, Long senderId) {
+        try {
+            // 使用JdbcTemplate直接执行更新
+            int updated = jdbcTemplate.update(
+                    "UPDATE conversation_member SET unread_count = unread_count + 1 " +
+                            "WHERE conv_id = ? AND user_id != ? AND member_status = 1",
+                    convId, senderId
+            );
+
+            if (updated > 0) {
+                System.out.println("更新了 " + updated + " 个成员的未读计数");
+            }
+        } catch (Exception e) {
+            System.err.println("更新未读计数失败: " + e.getMessage());
+            // 这里不抛出异常，避免影响消息发送
+        }
+    }
 
     @Override
     public List<Message> getMessagesByConvId(Long convId, Integer page, Integer pageSize) {
@@ -104,7 +152,6 @@ public class MessageServiceImpl implements MessageService {
         return messageMapper.countMessagesByConvId(convId);
     }
 
-    // 修改：删除 readTime 参数
     @Override
     public int updateMessageStatus(Long messageId, Integer status) {
         return messageMapper.updateMessageStatus(messageId, status);

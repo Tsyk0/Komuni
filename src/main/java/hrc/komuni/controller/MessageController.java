@@ -36,9 +36,9 @@ public class MessageController {
         }
     }
 
-    @PostMapping("/saveMessage")
-    @Operation(summary = "保存消息", description = "保存一条新的消息记录")
-    public ApiResponse<Message> saveMessage(
+    @PostMapping("/sendMessage")
+    @Operation(summary = "发送消息", description = "发送一条新的消息记录")
+    public ApiResponse<Message> sendMessage(
             @Parameter(description = "消息对象", required = true) @RequestBody Message message) {
         try {
             Long messageId = messageService.insertMessage(message);

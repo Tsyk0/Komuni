@@ -28,5 +28,4 @@ public class ConversationMember {
 
     // 新增字段：未读消息数和最后阅读消息序列号
     private Integer unreadCount; // 未读消息数（缓存，提高性能）
-    private Long lastReadMessageSeq; // 最后阅读的消息序列号（会话内）
 }

@@ -25,13 +25,4 @@ public class WebSocketConfig implements WebSocketConfigurer, WebMvcConfigurer {
                 .setAllowedOriginPatterns("*");  // ✅ 改为 allowedOriginPatterns
     }
 
-//    @Override
-//    public void addCorsMappings(CorsRegistry registry) {
-//        registry.addMapping("/**")
-//                .allowedOriginPatterns("*")  // ✅ 关键修改：将 allowedOrigins 改为 allowedOriginPatterns
-//                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
-//                .allowedHeaders("*")
-//                .allowCredentials(true)
-//                .maxAge(3600);  // ✅ 添加 maxAge 提高性能
-//    }
 }

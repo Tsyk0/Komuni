@@ -40,10 +40,6 @@ public class ConversationMemberServiceImpl implements ConversationMemberService 
         return conversationMemberMapper.selectByUserId(userId);
     }
 
-    @Override
-    public Long getLastReadSeq(Long userId, Long convId) {
-        return conversationMemberMapper.getLastReadSeq(userId, convId);
-    }
 
     @Override
     public List<Long> selectConvIdsByUserId(Long userId) {
@@ -82,10 +78,6 @@ public class ConversationMemberServiceImpl implements ConversationMemberService 
         return conversationMemberMapper.removeMember(convId, userId);
     }
 
-    @Override
-    public int updateLastReadSeq(Long userId, Long convId, Long seq) {
-        return conversationMemberMapper.updateLastReadSeq(userId, convId, seq);
-    }
 
     @Override
     public int incrementUnreadCount(Long convId, Long excludeUserId) {
@@ -223,10 +215,6 @@ public class ConversationMemberServiceImpl implements ConversationMemberService 
         return result;
     }
 
-    // ============ 未在Controller中使用的方法实现（放在底端） ============
-
-
-    // ============ 私有辅助方法（放在最底端） ============
     private Long getLatestConversationId() {
         return null;
     }

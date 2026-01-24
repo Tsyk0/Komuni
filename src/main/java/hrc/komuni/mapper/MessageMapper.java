@@ -13,7 +13,7 @@ public interface MessageMapper {
 
     @Select("SELECT * FROM message " +
             "WHERE conv_id = #{convId} AND is_recalled = 0 " +
-            "ORDER BY send_time DESC " +
+            "ORDER BY send_time ASC " +  // 改为按时间排序
             "LIMIT #{offset}, #{limit}")
     List<Message> selectMessagesByConvId(
             @Param("convId") Long convId,
@@ -24,7 +24,6 @@ public interface MessageMapper {
             "WHERE conv_id = #{convId} AND is_recalled = 0")
     Long countMessagesByConvId(@Param("convId") Long convId);
 
-    // 修改：删除 read_time 参数
     @Update("UPDATE message SET message_status = #{status} " +
             "WHERE message_id = #{messageId}")
     int updateMessageStatus(
@@ -39,30 +38,32 @@ public interface MessageMapper {
 
     @Select("SELECT * FROM message " +
             "WHERE conv_id = #{convId} AND is_recalled = 0 " +
-            "ORDER BY conv_msg_seq DESC LIMIT 1")
+            "ORDER BY send_time DESC LIMIT 1")  // 改为按时间排序
     Message selectLastMessageByConvId(@Param("convId") Long convId);
 
     @Insert("INSERT INTO message (" +
-            "conv_id, sender_id, receiver_id, message_type, message_content, " +
+            "conv_id, sender_id, message_type, message_content, " +
             "message_status, is_recalled, reply_to_message_id, at_user_ids, " +
-            "conv_msg_seq, send_time" +  // ⬅️ 新增字段
+            "send_time" +  // 移除：conv_msg_seq,
             ") VALUES (" +
-            "#{convId}, #{senderId}, #{receiverId}, #{messageType}, #{messageContent}, " +
+            "#{convId}, #{senderId}, #{messageType}, #{messageContent}, " +
             "#{messageStatus}, #{isRecalled}, #{replyToMessageId}, " +
             "#{atUserIds, typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler}, " +
-            "#{convMsgSeq}, #{sendTime}" +  // ⬅️ 新增字段
+            "#{sendTime}" +  // 移除：#{convMsgSeq},
             ")")
     @Options(useGeneratedKeys = true, keyProperty = "messageId")
     int insertMessage(Message message);
 
-    // 需要添加的方法：按序列号查询
     @Select("SELECT * FROM message " +
-            "WHERE conv_id = #{convId} AND conv_msg_seq > #{lastSeq} " +
+            "WHERE conv_id = #{convId} AND send_time > (" +  // 改为按时间查询新消息
+            "    SELECT MAX(send_time) FROM message " +
+            "    WHERE conv_id = #{convId} AND message_id = #{lastMessageId}" +
+            ") " +
             "AND is_recalled = 0 " +
-            "ORDER BY conv_msg_seq ASC " +
+            "ORDER BY send_time ASC " +
             "LIMIT #{limit}")
-    List<Message> selectNewMessagesBySeq(
+    List<Message> selectNewMessagesByTime(
             @Param("convId") Long convId,
-            @Param("lastSeq") Long lastSeq,
+            @Param("lastMessageId") Long lastMessageId,
             @Param("limit") Integer limit);
 }

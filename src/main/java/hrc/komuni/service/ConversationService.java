@@ -10,8 +10,10 @@ public interface ConversationService {
     String getConvNameByConvId(Long convId);
 
 
-    Integer getConvTypeByConvId(Long convId);
-
+    /**
+     * 批量查询会话信息
+     */
+    List<Conversation> selectConversationsBatch(List<Long> convIds);
 
     Integer getMemberCount(Long convId);
 
@@ -23,5 +25,6 @@ public interface ConversationService {
 
     // 新增：查询群聊的已读回执设置
     Boolean getReadReceiptSetting(Long convId);
+
 
 }

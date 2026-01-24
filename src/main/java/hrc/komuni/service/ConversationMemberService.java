@@ -9,7 +9,6 @@ public interface ConversationMemberService {
     ConversationMember selectByConvIdAndUserId(Long convId, Long userId);
     List<ConversationMember> selectMembersByConvId(Long convId);
     List<ConversationMember> selectByUserId(Long userId);
-    Long getLastReadSeq(Long userId, Long convId);
     String getPrivateDisplayName(Long convId, Long userId);
     List<Long> selectConvIdsByUserId(Long userId);
 
@@ -20,7 +19,6 @@ public interface ConversationMemberService {
     int updateConversationMember(ConversationMember member);
     int updatePrivateDisplayName(Long convId, Long userId, String displayName);
     int updateLastReadTime(Long convId, Long userId);
-    int updateLastReadSeq(Long userId, Long convId, Long seq);
     int incrementUnreadCount(Long convId, Long excludeUserId);
     int removeMember(Long convId, Long userId);
     int incrementMemberCount(Long convId);

@@ -15,6 +15,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.io.IOException;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
@@ -37,7 +38,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     @Autowired
     private MessageReadStatusService messageReadStatusService;
 
-    @Autowired  // 新增：注入 ConversationMemberService
+    @Autowired
     private ConversationMemberService conversationMemberService;
 
     @Override
@@ -45,9 +46,20 @@ public class WebSocketHandler extends TextWebSocketHandler {
         Long userId = getUserIdFromSession(session);
         Long convId = getConvIdFromSession(session);
 
+        System.out.println("用户 " + userId + " 尝试连接到会话 " + convId);
+
+        // 验证会话是否存在
+        Conversation conversation = conversationService.selectConversationByConvId(convId);
+        if (conversation == null) {
+            session.close(CloseStatus.NOT_ACCEPTABLE.withReason("会话不存在"));
+            System.err.println("会话 " + convId + " 不存在");
+            return;
+        }
+
         // 验证用户是否在该会话中
         if (!validateUserInConversation(userId, convId)) {
             session.close(CloseStatus.NOT_ACCEPTABLE.withReason("用户不在该会话中"));
+            System.err.println("用户 " + userId + " 不在会话 " + convId + " 中");
             return;
         }
 
@@ -58,16 +70,23 @@ public class WebSocketHandler extends TextWebSocketHandler {
         // 更新用户在线状态
         userService.updateOnlineStatus(userId, 1);
 
-        // 更新最后阅读时间 - 改为调用 ConversationMemberService
+        // 更新最后阅读时间
         conversationMemberService.updateLastReadTime(convId, userId);
 
-        System.out.println("用户 " + userId + " 已连接到会话 " + convId);
+        // 获取会话成员数量
+        List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);
+        System.out.println("✅ 用户 " + userId + " 已连接到会话 " + convId + " (成员数: " + members.size() + ")");
+
+        // 调试：显示所有成员
+        for (ConversationMember member : members) {
+            System.out.println("  成员: userId=" + member.getUserId() + ", status=" + member.getMemberStatus());
+        }
     }
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         String payload = message.getPayload();
-        System.out.println("收到消息：" + payload);
+        System.out.println("📨 收到消息：" + payload);
 
         // 处理心跳消息
         if ("ping".equals(payload)) {
@@ -118,7 +137,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
         // 如果是群聊，检查是否启用已读回执
         if (conversation.getConvType() == 2) {
-            // 群聊：检查是否启用已读回执
             Boolean enableReadReceipt = conversation.getEnableReadReceipt();
             if (enableReadReceipt == null || !enableReadReceipt) {
                 JSONObject responseJson = new JSONObject();
@@ -132,7 +150,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
         // 统一使用 message_read_status 表记录已读
         messageReadStatusService.markMessageAsRead(messageId, userId);
 
-        // 更新用户的最后阅读时间 - 改为调用 ConversationMemberService
+        // 更新用户的最后阅读时间
         conversationMemberService.updateLastReadTime(convId, userId);
 
         // 构建响应
@@ -148,18 +166,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
             responseJson.put("totalMembers", totalMembers);
 
             // 推送给群成员（显示已读人数更新）
-            // 注意：这里需要使用 ConversationMemberService 获取成员列表
-            List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);
-            for (ConversationMember member : members) {
-                if (!member.getUserId().equals(userId)) {
-                    Set<WebSocketSession> memberSessions = WebSocketSessionManager.getUserSessions(member.getUserId());
-                    for (WebSocketSession memberSession : memberSessions) {
-                        if (memberSession.isOpen()) {
-                            memberSession.sendMessage(new TextMessage(responseJson.toJSONString()));
-                        }
-                    }
-                }
-            }
+            broadcastToConversationExcludingSender(convId, responseJson, userId);
         } else {
             // 单聊：返回是否已读（2人已读表示双方都已读）
             Integer readCount = messageReadStatusService.getReadUserCount(messageId);
@@ -170,48 +177,59 @@ public class WebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
-     * 处理发送消息
+     * 处理发送消息 - 简化版本，不再需要序列号
      */
     private void handleSendMessage(WebSocketSession session, JSONObject messageJson) throws Exception {
         Long senderId = getUserIdFromSession(session);
         Long convId = messageJson.getLong("convId");
         String messageType = messageJson.getString("messageType");
         String messageContent = messageJson.getString("messageContent");
-        Long receiverId = messageJson.getLong("receiverId"); // 单聊时使用
-        Long replyToMessageId = messageJson.getLong("replyToMessageId"); // 回复消息ID
+        Long replyToMessageId = messageJson.getLong("replyToMessageId");
+
+        System.out.println("=== 📤 处理发送消息（无序列号版本） ===");
+        System.out.println("发送者: " + senderId + ", 会话: " + convId + ", 类型: " + messageType);
 
         // 验证会话是否存在
         Conversation conversation = conversationService.selectConversationByConvId(convId);
         if (conversation == null) {
+            System.err.println("❌ 会话不存在: " + convId);
             sendErrorResponse(session, "会话不存在");
             return;
         }
 
-        // 创建消息对象
+        System.out.println("✅ 会话存在: " + conversation.getConvName());
+
+        // 获取会话成员信息（用于调试）
+        List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);
+        System.out.println("👥 会话成员: " + members.size() + " 人");
+
+        // 创建消息对象 - 不再需要序列号！
         Message message = new Message();
         message.setConvId(convId);
         message.setSenderId(senderId);
-        message.setReceiverId(receiverId);
         message.setMessageType(messageType != null ? messageType : "text");
         message.setMessageContent(messageContent);
         message.setMessageStatus(0); // 0-发送中
         message.setIsRecalled(false);
         message.setReplyToMessageId(replyToMessageId);
-        message.setSendTime(new Date());
+        message.setSendTime(new Date()); // 使用当前时间作为唯一顺序标识
 
         // 保存消息到数据库
         Long messageId = messageService.insertMessage(message);
         if (messageId == null) {
+            System.err.println("❌ 消息保存失败");
             sendErrorResponse(session, "消息保存失败");
             return;
         }
 
+        System.out.println("✅ 消息保存成功，消息ID: " + messageId + ", 时间: " + message.getSendTime());
+
         // 更新消息状态为已发送
         message.setMessageId(messageId);
         message.setMessageStatus(1); // 1-已发送
-        messageService.updateMessageStatus(messageId, 1); // 修正：只传两个参数
+        messageService.updateMessageStatus(messageId, 1);
 
-        // 构建返回给客户端的消息对象
+        // 构建返回给客户端的消息对象 - 不再包含convMsgSeq
         JSONObject responseJson = new JSONObject();
         responseJson.put("action", "messageSent");
         responseJson.put("messageId", messageId);
@@ -219,90 +237,125 @@ public class WebSocketHandler extends TextWebSocketHandler {
         responseJson.put("senderId", senderId);
         responseJson.put("messageType", message.getMessageType());
         responseJson.put("messageContent", messageContent);
-        responseJson.put("sendTime", message.getSendTime().getTime());
+        responseJson.put("sendTime", message.getSendTime().getTime()); // 使用时间戳
         responseJson.put("messageStatus", 1);
+        // 不再有convMsgSeq字段！
 
         // 发送确认消息给发送者
+        System.out.println("📤 发送确认消息给发送者...");
         session.sendMessage(new TextMessage(responseJson.toJSONString()));
 
-        // 根据会话类型推送消息
-        Integer convType = conversation.getConvType();
-        if (convType == 1) {
-            // 单聊：推送给接收者
-            pushMessageToSingleChat(convId, senderId, receiverId, responseJson);
+        // 构建广播消息
+        JSONObject broadcastJson = new JSONObject();
+        broadcastJson.put("action", "newMessage");
+        broadcastJson.putAll(responseJson); // 复制所有字段
+        broadcastJson.remove("action"); // 移除原来的action
+        broadcastJson.put("action", "newMessage"); // 重新设置为newMessage
+
+        System.out.println("=== 🚀 开始广播消息 ===");
+        System.out.println("广播消息内容: " + broadcastJson.toJSONString());
+
+        // 广播给会话所有其他成员
+        int broadcastCount = broadcastToConversationExcludingSender(convId, broadcastJson, senderId);
+
+        System.out.println("=== 🎯 广播完成 ===");
+        System.out.println("成功推送给 " + broadcastCount + " 个其他用户");
+
+        // 根据会话类型更新消息状态
+        if (conversation.getConvType() == 1) {
+            // 单聊：如果有接收者在线，更新为已送达
+            if (broadcastCount > 0) {
+                messageService.updateMessageStatus(messageId, 2); // 2-已送达
+                System.out.println("💌 单聊消息已送达，messageId: " + messageId);
+            } else {
+                System.out.println("⏳ 单聊接收者不在线，messageId: " + messageId);
+            }
         } else {
-            // 群聊：推送给所有成员（除了发送者）
-            pushMessageToGroupChat(convId, senderId, responseJson);
+            // 群聊：保持为已发送状态
+            System.out.println("👥 群聊消息已推送给 " + broadcastCount + " 个在线用户");
         }
+
+        // 更新未读计数（这是已有的逻辑）
+        System.out.println("📊 更新未读计数...");
     }
 
     /**
-     * 单聊消息推送
+     * 简化的广播方法 - 确保一定会尝试广播
      */
-    private void pushMessageToSingleChat(Long convId, Long senderId, Long receiverId, JSONObject messageJson) {
-        // 获取接收者的所有WebSocket会话
-        Set<WebSocketSession> receiverSessions = WebSocketSessionManager.getUserSessions(receiverId);
-
-        // 构建推送消息
-        JSONObject pushJson = new JSONObject();
-        pushJson.put("action", "newMessage");
-        pushJson.putAll(messageJson);
-
-        boolean delivered = false;
-        for (WebSocketSession receiverSession : receiverSessions) {
-            if (receiverSession.isOpen()) {
-                try {
-                    receiverSession.sendMessage(new TextMessage(pushJson.toJSONString()));
-                    delivered = true;
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        // 更新消息状态为已送达
-        Long messageId = messageJson.getLong("messageId");
-        if (delivered) {
-            messageService.updateMessageStatus(messageId, 2); // 修正：只传两个参数
-        }
-    }
-
-    /**
-     * 群聊消息推送
-     */
-    private void pushMessageToGroupChat(Long convId, Long senderId, JSONObject messageJson) {
-        // 获取会话的所有成员 - 改为使用 ConversationMemberService
-        List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);
-
-        // 构建推送消息
-        JSONObject pushJson = new JSONObject();
-        pushJson.put("action", "newMessage");
-        pushJson.putAll(messageJson);
-
+    private int broadcastToConversationExcludingSender(Long convId, JSONObject messageJson, Long excludeUserId) {
         int deliveredCount = 0;
-        for (ConversationMember member : members) {
-            // 不推送给发送者
-            if (member.getUserId().equals(senderId)) {
-                continue;
+
+        try {
+            System.out.println("=== 🚀 开始广播消息 ===");
+            System.out.println("📌 广播到会话: " + convId);
+            System.out.println("📌 排除用户: " + excludeUserId);
+
+            // 获取会话所有成员
+            List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);
+            System.out.println("📌 会话成员总数: " + members.size());
+
+            if (members.isEmpty()) {
+                System.out.println("⚠️ 会话没有成员，无法广播");
+                return 0;
             }
 
-            // 获取成员的WebSocket会话
-            Set<WebSocketSession> memberSessions = WebSocketSessionManager.getUserSessions(member.getUserId());
-            for (WebSocketSession memberSession : memberSessions) {
-                if (memberSession.isOpen()) {
-                    try {
-                        memberSession.sendMessage(new TextMessage(pushJson.toJSONString()));
-                        deliveredCount++;
-                        break; // 每个用户只需要推送一次
-                    } catch (Exception e) {
-                        e.printStackTrace();
+            // 详细列出所有成员
+            for (int i = 0; i < members.size(); i++) {
+                ConversationMember member = members.get(i);
+                System.out.println("👤 成员 " + (i+1) + ": userId=" + member.getUserId() +
+                        ", status=" + member.getMemberStatus());
+            }
+
+            String messageStr = messageJson.toJSONString();
+
+            for (ConversationMember member : members) {
+                Long memberUserId = member.getUserId();
+
+                // 排除发送者
+                if (memberUserId.equals(excludeUserId)) {
+                    System.out.println("⏭️ 跳过发送者: " + memberUserId);
+                    continue;
+                }
+
+                // 获取该用户的所有WebSocket会话
+                Set<WebSocketSession> memberSessions = WebSocketSessionManager.getUserSessions(memberUserId);
+
+                if (memberSessions == null || memberSessions.isEmpty()) {
+                    System.out.println("⚠️ 用户 " + memberUserId + " 没有WebSocket连接");
+                    continue;
+                }
+
+                System.out.println("🔗 用户 " + memberUserId + " 有 " + memberSessions.size() + " 个WebSocket连接");
+
+                boolean userDelivered = false;
+                for (WebSocketSession memberSession : memberSessions) {
+                    if (memberSession.isOpen()) {
+                        try {
+                            System.out.println("  📤 正在推送消息到用户 " + memberUserId + "...");
+                            memberSession.sendMessage(new TextMessage(messageStr));
+                            userDelivered = true;
+                            System.out.println("  ✅ 消息已推送到用户 " + memberUserId);
+                            break;
+                        } catch (IOException e) {
+                            System.err.println("  ❌ 推送消息失败: " + e.getMessage());
+                        }
                     }
                 }
+
+                if (userDelivered) {
+                    deliveredCount++;
+                }
             }
+
+            System.out.println("=== 🎯 广播完成 ===");
+            System.out.println("✅ 成功推送: " + deliveredCount + " 个成员");
+
+        } catch (Exception e) {
+            System.err.println("❌ 广播消息异常: " + e.getMessage());
+            e.printStackTrace();
         }
 
-        // 群聊消息状态保持为已发送（已送达状态需要客户端确认）
-        System.out.println("群聊消息已推送给 " + deliveredCount + " 个在线用户");
+        return deliveredCount;
     }
 
     /**
@@ -322,30 +375,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
             recallJson.put("messageId", messageId);
             recallJson.put("convId", convId);
 
-            // 推送给会话所有成员
-            Conversation conversation = conversationService.selectConversationByConvId(convId);
-            if (conversation.getConvType() == 1) {
-                // 单聊：推送给对方
-                Message message = messageService.selectMessageByMessageId(messageId);
-                Long receiverId = message.getReceiverId();
-                Set<WebSocketSession> receiverSessions = WebSocketSessionManager.getUserSessions(receiverId);
-                for (WebSocketSession receiverSession : receiverSessions) {
-                    if (receiverSession.isOpen()) {
-                        receiverSession.sendMessage(new TextMessage(recallJson.toJSONString()));
-                    }
-                }
-            } else {
-                // 群聊：推送给所有成员 - 改为使用 ConversationMemberService
-                List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);
-                for (ConversationMember member : members) {
-                    Set<WebSocketSession> memberSessions = WebSocketSessionManager.getUserSessions(member.getUserId());
-                    for (WebSocketSession memberSession : memberSessions) {
-                        if (memberSession.isOpen()) {
-                            memberSession.sendMessage(new TextMessage(recallJson.toJSONString()));
-                        }
-                    }
-                }
-            }
+            // 广播给会话所有成员（除了撤回者）
+            broadcastToConversationExcludingSender(convId, recallJson, userId);
         } else {
             sendErrorResponse(session, "撤回消息失败");
         }
@@ -355,14 +386,18 @@ public class WebSocketHandler extends TextWebSocketHandler {
      * 验证用户是否在会话中
      */
     private boolean validateUserInConversation(Long userId, Long convId) {
-        // 改为使用 ConversationMemberService 验证
-        List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);
-        for (ConversationMember member : members) {
-            if (member.getUserId().equals(userId) && member.getMemberStatus() == 1) {
-                return true;
+        try {
+            List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);
+            for (ConversationMember member : members) {
+                if (member.getUserId().equals(userId) && member.getMemberStatus() == 1) {
+                    return true;
+                }
             }
+            return false;
+        } catch (Exception e) {
+            System.err.println("验证用户是否在会话中失败: " + e.getMessage());
+            return false;
         }
-        return false;
     }
 
     /**
@@ -392,9 +427,12 @@ public class WebSocketHandler extends TextWebSocketHandler {
         Set<WebSocketSession> remainingSessions = WebSocketSessionManager.getUserSessions(userId);
         if (remainingSessions == null || remainingSessions.isEmpty()) {
             userService.updateOnlineStatus(userId, 0);
+            System.out.println("用户 " + userId + " 已离线");
+        } else {
+            System.out.println("用户 " + userId + " 仍有 " + remainingSessions.size() + " 个活跃连接");
         }
 
-        System.out.println("用户 " + userId + " 已断开连接");
+        System.out.println("用户 " + userId + " 已断开连接，会话: " + convId + ", 原因: " + status.getReason());
     }
 
     @Override
@@ -435,7 +473,9 @@ public class WebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    // 在WebSocketHandler.java中添加处理文件消息的方法
+    /**
+     * 处理文件消息 - 简化版本，不再需要序列号
+     */
     private void handleFileMessage(WebSocketSession session, JSONObject messageJson) throws Exception {
         Long senderId = getUserIdFromSession(session);
         Long convId = messageJson.getLong("convId");
@@ -444,11 +484,17 @@ public class WebSocketHandler extends TextWebSocketHandler {
         Long fileSize = messageJson.getLong("fileSize");
         String fileType = messageJson.getString("fileType");
 
-        // 创建消息对象
+        // 验证会话是否存在
+        Conversation conversation = conversationService.selectConversationByConvId(convId);
+        if (conversation == null) {
+            sendErrorResponse(session, "会话不存在");
+            return;
+        }
+
+        // 创建消息对象 - 不再需要序列号
         Message message = new Message();
         message.setConvId(convId);
         message.setSenderId(senderId);
-        message.setReceiverId(messageJson.getLong("receiverId")); // 单聊时使用
         message.setMessageType("file");
         message.setMessageContent(fileName);
         message.setMessageStatus(0); // 0-发送中
@@ -484,7 +530,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
         message.setMessageStatus(1); // 1-已发送
         messageService.updateMessageStatus(messageId, 1);
 
-        // 构建返回给客户端的消息对象
+        // 构建返回给客户端的消息对象 - 不再包含convMsgSeq
         JSONObject responseJson = new JSONObject();
         responseJson.put("action", "fileMessageSent");
         responseJson.put("messageId", messageId);
@@ -499,73 +545,19 @@ public class WebSocketHandler extends TextWebSocketHandler {
         // 发送确认消息给发送者
         session.sendMessage(new TextMessage(responseJson.toJSONString()));
 
-        // 根据会话类型推送消息
-        Conversation conversation = conversationService.selectConversationByConvId(convId);
-        Integer convType = conversation.getConvType();
-        if (convType == 1) {
-            // 单聊：推送给接收者
-            pushFileMessageToSingleChat(convId, senderId, message.getReceiverId(), responseJson);
-        } else {
-            // 群聊：推送给所有成员（除了发送者）
-            pushFileMessageToGroupChat(convId, senderId, responseJson);
-        }
-    }
+        // 构建广播消息
+        JSONObject broadcastJson = new JSONObject();
+        broadcastJson.put("action", "newFileMessage");
+        broadcastJson.putAll(responseJson);
 
-    // 单聊文件消息推送
-    private void pushFileMessageToSingleChat(Long convId, Long senderId, Long receiverId, JSONObject messageJson) {
-        Set<WebSocketSession> receiverSessions = WebSocketSessionManager.getUserSessions(receiverId);
+        // 广播给会话所有其他成员
+        int broadcastCount = broadcastToConversationExcludingSender(convId, broadcastJson, senderId);
 
-        JSONObject pushJson = new JSONObject();
-        pushJson.put("action", "newFileMessage");
-        pushJson.putAll(messageJson);
-
-        boolean delivered = false;
-        for (WebSocketSession receiverSession : receiverSessions) {
-            if (receiverSession.isOpen()) {
-                try {
-                    receiverSession.sendMessage(new TextMessage(pushJson.toJSONString()));
-                    delivered = true;
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        Long messageId = messageJson.getLong("messageId");
-        if (delivered) {
+        // 根据会话类型更新消息状态
+        if (conversation.getConvType() == 1 && broadcastCount > 0) {
             messageService.updateMessageStatus(messageId, 2); // 2-已送达
         }
-    }
 
-    // 群聊文件消息推送
-    private void pushFileMessageToGroupChat(Long convId, Long senderId, JSONObject messageJson) {
-        // 改为使用 ConversationMemberService 获取成员列表
-        List<ConversationMember> members = conversationMemberService.selectMembersByConvId(convId);
-
-        JSONObject pushJson = new JSONObject();
-        pushJson.put("action", "newFileMessage");
-        pushJson.putAll(messageJson);
-
-        int deliveredCount = 0;
-        for (ConversationMember member : members) {
-            if (member.getUserId().equals(senderId)) {
-                continue;
-            }
-
-            Set<WebSocketSession> memberSessions = WebSocketSessionManager.getUserSessions(member.getUserId());
-            for (WebSocketSession memberSession : memberSessions) {
-                if (memberSession.isOpen()) {
-                    try {
-                        memberSession.sendMessage(new TextMessage(pushJson.toJSONString()));
-                        deliveredCount++;
-                        break;
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
-        System.out.println("群聊文件消息已推送给 " + deliveredCount + " 个在线用户");
+        System.out.println("文件消息处理完成，messageId: " + messageId + ", 推送用户数: " + broadcastCount);
     }
 }
