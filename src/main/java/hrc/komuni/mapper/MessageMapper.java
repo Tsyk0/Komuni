@@ -13,7 +13,7 @@ public interface MessageMapper {
 
     @Select("SELECT * FROM message " +
             "WHERE conv_id = #{convId} AND is_recalled = 0 " +
-            "ORDER BY send_time ASC " +  // 改为按时间排序
+            "ORDER BY send_time DESC " +  // 改为DESC降序
             "LIMIT #{offset}, #{limit}")
     List<Message> selectMessagesByConvId(
             @Param("convId") Long convId,

@@ -39,26 +39,7 @@ public class ConversationController {
         }
     }
 
-    @PostMapping("/selectConversationsBatch")
-    @Operation(summary = "批量查询会话信息", description = "根据会话ID列表批量查询会话信息")
-    public ApiResponse<List<Conversation>> selectConversationsBatch(
-            @RequestBody List<Long> convIds) {
-        try {
-            if (convIds == null || convIds.isEmpty()) {
-                return ApiResponse.error("会话ID列表不能为空");
-            }
 
-            if (convIds.size() > 100) {
-                return ApiResponse.error("批量查询数量不能超过100个");
-            }
-
-            List<Conversation> conversations = conversationService.selectConversationsBatch(convIds);
-
-            return ApiResponse.success("查询成功", conversations);
-        } catch (Exception e) {
-            return ApiResponse.serverError("批量查询会话失败: " + e.getMessage());
-        }
-    }
 
     @GetMapping("/selectConvIdsByUserId")
     @Operation(summary = "查询用户参与的会话ID", description = "根据用户ID查询该用户参与的所有会话ID列表")
