@@ -391,7 +391,7 @@ public class UserController {
             data.put("tokenWithBearer", "Bearer " + token);
             data.put("userId", claims.getSubject());
             data.put("expiresAt", claims.getExpiration());
-            data.put("isValid", jwtUtil.validateToken(token, String.valueOf(testUserId)));
+            data.put("isValid", jwtUtil.validateToken(token, testUserId));
 
             return ApiResponse.success("JWT测试成功", data);
         } catch (Exception e) {

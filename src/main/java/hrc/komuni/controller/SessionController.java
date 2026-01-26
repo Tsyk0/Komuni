@@ -25,26 +25,70 @@ public class SessionController {
     public ApiResponse<Map<String, Set<WebSocketSession>>> getUserAllSession(
             @Parameter(description = "用户ID", required = true) @RequestParam Long userId) {
         try {
-            List<hrc.komuni.entity.ConversationMember> members = conversationMemberService.selectByUserId(userId);
+            // 1. 获取用户的所有会话ID
+            List<Long> convIds = conversationMemberService.selectConvIdsByUserId(userId);
 
-            List<Long> convIds = new ArrayList<>();
-            for (hrc.komuni.entity.ConversationMember member : members) {
-                convIds.add(member.getConvId());
-            }
-
-            System.out.println("用户的会话 ID：" + convIds);
+            System.out.println("用户 " + userId + " 的会话 ID：" + convIds);
 
             Map<String, Set<WebSocketSession>> result = new HashMap<>();
 
+            // 2. 查询每个会话的在线用户
             for (Long convId : convIds) {
-                Set<WebSocketSession> convSessions = WebSocketSessionManager.getConvSessions(convId);
+                // 使用新的方法名
+                Set<WebSocketSession> convSessions = WebSocketSessionManager.getConversationSubscribers(convId);
                 result.put("convId:" + convId, convSessions);
-                System.out.println("会话 ID " + convId + " 的 WebSocket 会话：" + convSessions);
+
+                // 输出调试信息
+                System.out.println("会话 " + convId + " 的在线用户数: " + convSessions.size());
+                for (WebSocketSession session : convSessions) {
+                    Long sessionUserId = WebSocketSessionManager.getUserIdByConnection(session);
+                    System.out.println("  - 用户ID: " + sessionUserId + ", 会话ID: " + session.getId());
+                }
+            }
+
+            // 3. 也返回用户的当前连接状态
+            WebSocketSession userSession = WebSocketSessionManager.getUserConnection(userId);
+            if (userSession != null) {
+                result.put("currentUserConnection", Collections.singleton(userSession));
+                System.out.println("用户 " + userId + " 当前连接状态: " +
+                        (userSession.isOpen() ? "在线" : "离线"));
             }
 
             return ApiResponse.success("查询成功", result);
         } catch (Exception e) {
+            System.err.println("查询会话失败: " + e.getMessage());
+            e.printStackTrace();
             return ApiResponse.serverError("查询会话失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 新增：获取WebSocket连接统计信息
+     */
+    @GetMapping("/getWebSocketStats")
+    @Operation(summary = "获取WebSocket连接统计信息")
+    public ApiResponse<Map<String, Object>> getWebSocketStats() {
+        try {
+            Map<String, Object> stats = WebSocketSessionManager.getStatistics();
+            return ApiResponse.success("获取成功", stats);
+        } catch (Exception e) {
+            return ApiResponse.serverError("获取统计信息失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 新增：获取用户在线状态
+     */
+    @GetMapping("/checkUserOnline")
+    @Operation(summary = "检查用户是否在线")
+    public ApiResponse<Boolean> checkUserOnline(
+            @Parameter(description = "用户ID", required = true) @RequestParam Long userId) {
+        try {
+            WebSocketSession session = WebSocketSessionManager.getUserConnection(userId);
+            boolean isOnline = session != null && session.isOpen();
+            return ApiResponse.success("查询成功", isOnline);
+        } catch (Exception e) {
+            return ApiResponse.serverError("查询失败: " + e.getMessage());
         }
     }
 }
