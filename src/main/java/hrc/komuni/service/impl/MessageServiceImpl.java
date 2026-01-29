@@ -5,6 +5,7 @@ import hrc.komuni.mapper.ConversationMemberMapper;
 import hrc.komuni.mapper.MessageMapper;
 import hrc.komuni.service.MessageService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = "conversationDetailsByUserId", allEntries = true)
     public Long insertMessage(Message message) {
         // 验证必要的字段
         if (message.getConvId() == null) {

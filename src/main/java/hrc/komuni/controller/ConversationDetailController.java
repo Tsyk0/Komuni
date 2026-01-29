@@ -23,7 +23,7 @@ public class ConversationDetailController {
     @GetMapping("/getConversationDetailsByUserId")
     @Operation(summary = "获取用户会话详情列表", description = "获取用户的会话列表，包含会话信息和最后一条消息")
     public ApiResponse<List<ConversationDetailDTO>> getConversationDetailsByUserId(
-            @Parameter(description = "用户ID", required = true) @RequestParam Long userId) {
+            @Parameter(description = "用户ID", required = true) @RequestAttribute("userId") Long userId) {
         try {
             List<ConversationDetailDTO> details = conversationDetailService.getConversationDetailsByUserId(userId);
             return ApiResponse.success("查询成功", details);

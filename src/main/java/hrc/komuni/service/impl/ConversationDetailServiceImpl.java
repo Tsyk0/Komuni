@@ -4,6 +4,7 @@ import hrc.komuni.dto.ConversationDetailDTO;
 import hrc.komuni.mapper.ConversationDetailMapper;
 import hrc.komuni.service.ConversationDetailService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -15,6 +16,7 @@ public class ConversationDetailServiceImpl implements ConversationDetailService 
     private ConversationDetailMapper conversationDetailMapper;
 
     @Override
+    @Cacheable(cacheNames = "conversationDetailsByUserId", key = "#userId", unless = "#result == null")
     public List<ConversationDetailDTO> getConversationDetailsByUserId(Long userId) {
         try {
             // 获取基础会话信息

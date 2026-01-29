@@ -5,6 +5,7 @@ import hrc.komuni.mapper.FriendRelationDetailMapper;
 import hrc.komuni.service.FriendRelationDetailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import java.util.List;
 
@@ -16,6 +17,7 @@ public class FriendRelationDetailServiceImpl implements FriendRelationDetailServ
     private final FriendRelationDetailMapper friendRelationDetailMapper;
 
     @Override
+    @Cacheable(cacheNames = "friendListByUserId", key = "#userId", unless = "#result == null")
     public List<FriendRelationDetailDTO> getFriendListbyUserId(Long userId) {
         log.info("获取用户{}的好友列表", userId);
 

@@ -4,6 +4,12 @@ server:
 spring:
   security:
     enabled: false
+  cache:
+    type: redis
+  redis:
+    host: localhost
+    port: 6379
+    timeout: 2s
   datasource:
     url: jdbc:mysql://localhost:3306/komuni?useSSL=false
     username: root
@@ -18,6 +24,8 @@ spring:
     date-format: yyyy-MM-dd
     time-format: HH:mm:ss
     datetime-format: yyyy-MM-dd HH:mm:ss
+    serialization:
+      write-dates-as-timestamps: false
   # 在这里添加文件上传配置
   servlet:
     multipart:
