@@ -27,7 +27,12 @@ public class JwtFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-
+        // ✅ 放行预检请求
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            addCorsHeaders(request, response);
+            response.setStatus(HttpServletResponse.SC_OK);
+            return;
+        }
         String token = request.getHeader("Authorization");
 
         if (token != null && token.startsWith("Bearer ")) {
@@ -74,6 +79,19 @@ public class JwtFilter extends OncePerRequestFilter {
         PrintWriter writer = response.getWriter();
         writer.write(objectMapper.writeValueAsString(apiResponse));
         writer.flush();
+    }
+
+    private void addCorsHeaders(HttpServletRequest request, HttpServletResponse response) {
+        String origin = request.getHeader("Origin");
+        if (origin != null && !origin.trim().isEmpty()) {
+            response.setHeader("Access-Control-Allow-Origin", origin);
+            response.setHeader("Vary", "Origin");
+            response.setHeader("Access-Control-Allow-Credentials", "true");
+            response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+            String requestHeaders = request.getHeader("Access-Control-Request-Headers");
+            response.setHeader("Access-Control-Allow-Headers",
+                    (requestHeaders == null || requestHeaders.trim().isEmpty()) ? "*" : requestHeaders);
+        }
     }
 
     /**

@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.Map;
 
-@CrossOrigin(origins = "*")
+@CrossOrigin(originPatterns = "http://localhost:3000")
 @RestController
 @RequestMapping("/user")
 @Tag(name = "用户管理", description = "用户注册、登录、信息管理等操作接口")

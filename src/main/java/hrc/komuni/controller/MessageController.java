@@ -9,7 +9,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-@CrossOrigin(origins = "*")
+@CrossOrigin(originPatterns = "http://localhost:3000")
 @RestController
 @RequestMapping("/message")
 @Tag(name = "消息管理", description = "消息的增删改查操作接口")

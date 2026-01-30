@@ -14,7 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-@CrossOrigin(origins = "*")
+@CrossOrigin(originPatterns = "http://localhost:3000")
 @RestController
 @RequestMapping("/messageDetail")
 @Tag(name = "消息详情管理", description = "消息详情相关的复合查询接口")

@@ -22,7 +22,7 @@ public class WebSocketConfig implements WebSocketConfigurer, WebMvcConfigurer {
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         // WebSocket 配置
         registry.addHandler(webSocketHandler, "/ws")
-                .setAllowedOriginPatterns("*");  // ✅ 改为 allowedOriginPatterns
+                .setAllowedOriginPatterns("http://localhost:3000");
     }
 
 }
