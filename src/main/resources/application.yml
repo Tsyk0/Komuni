@@ -63,3 +63,7 @@ app:
   upload:
     path: ./uploads/          # 上传文件存储根路径
     avatar-path: /avatars/    # 头像子目录
+  # Cookie：开发用 Lax，生产(HTTPS) 可改为 same-site: None, secure: true
+  cookie:
+    same-site: Lax
+    secure: false

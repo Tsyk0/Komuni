@@ -5,8 +5,11 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
+import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CachingConfigurerSupport;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -24,7 +27,34 @@ import java.util.Map;
 
 @Configuration
 @EnableCaching
-public class CacheConfig {
+public class CacheConfig extends CachingConfigurerSupport {
+
+    @Bean
+    @Override
+    public CacheErrorHandler errorHandler() {
+        return new CacheErrorHandler() {
+            @Override
+            public void handleCacheGetError(RuntimeException exception, Cache cache, Object key) {
+                // Redis 不可用时当作缓存未命中，继续查库
+                System.err.println("[Cache] Redis get 失败，降级查库: " + exception.getMessage());
+            }
+
+            @Override
+            public void handleCachePutError(RuntimeException exception, Cache cache, Object key, Object value) {
+                System.err.println("[Cache] Redis put 失败，忽略: " + exception.getMessage());
+            }
+
+            @Override
+            public void handleCacheEvictError(RuntimeException exception, Cache cache, Object key) {
+                System.err.println("[Cache] Redis evict 失败，忽略: " + exception.getMessage());
+            }
+
+            @Override
+            public void handleCacheClearError(RuntimeException exception, Cache cache) {
+                System.err.println("[Cache] Redis clear 失败，忽略: " + exception.getMessage());
+            }
+        };
+    }
 
     @Bean
     public CacheManager cacheManager(RedisConnectionFactory connectionFactory) {

@@ -34,6 +34,9 @@ public class JwtFilter extends OncePerRequestFilter {
             return;
         }
         String token = request.getHeader("Authorization");
+        if (token == null || token.trim().isEmpty()) {
+            token = getTokenFromCookies(request);
+        }
 
         if (token != null && token.startsWith("Bearer ")) {
             try {
@@ -52,6 +55,20 @@ public class JwtFilter extends OncePerRequestFilter {
                 request.setAttribute("userId", Long.parseLong(claims.getSubject()));
 
             } catch (RuntimeException e) {
+                addCorsHeaders(request, response);
+                sendErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED,
+                        "无效或过期的 Token: " + e.getMessage());
+                return;
+            }
+        } else if (token != null && !token.trim().isEmpty()) {
+            try {
+                Claims claims = jwtUtil.parseToken(token);
+                if (claims.getExpiration().before(new Date())) {
+                    throw new RuntimeException("Token 已过期");
+                }
+                request.setAttribute("userId", Long.parseLong(claims.getSubject()));
+            } catch (RuntimeException e) {
+                addCorsHeaders(request, response);
                 sendErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED,
                         "无效或过期的 Token: " + e.getMessage());
                 return;
@@ -60,6 +77,7 @@ public class JwtFilter extends OncePerRequestFilter {
             // 对于需要认证的接口但没有token的情况
             String requestURI = request.getRequestURI();
             if (requiresAuthentication(requestURI)) {
+                addCorsHeaders(request, response);
                 sendErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED,
                         "需要认证 Token");
                 return;
@@ -144,5 +162,17 @@ public class JwtFilter extends OncePerRequestFilter {
         // 不属于任何模块的路径（如静态资源、健康检查等）
         System.out.println("   ✅ 公开路径（默认）: " + uri);
         return false; // 默认不需要认证
+    }
+
+    private String getTokenFromCookies(HttpServletRequest request) {
+        if (request.getCookies() == null) {
+            return null;
+        }
+        for (javax.servlet.http.Cookie cookie : request.getCookies()) {
+            if ("token".equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
     }
 }

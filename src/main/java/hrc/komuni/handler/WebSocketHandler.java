@@ -579,40 +579,62 @@ public class WebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
-     * 从WebSocketSession提取token
+     * 从WebSocketSession提取token：优先URL参数 token=xxx，其次握手请求的 Cookie 中的 token
      */
     private String extractTokenFromSession(WebSocketSession session) {
         try {
-            String query = session.getUri().getQuery();
-            if (query == null) {
-                System.err.println("WebSocket连接没有查询参数");
-                return null;
-            }
-
-            System.out.println("WebSocket查询参数: " + query);
-
-            String[] params = query.split("&");
-            for (String param : params) {
-                if (param.startsWith("token=")) {
-                    String[] parts = param.split("=");
-                    if (parts.length == 2) {
-                        String token = parts[1];
-                        // URL解码（如果有编码）
-                        if (token.contains("%")) {
-                            token = java.net.URLDecoder.decode(token, "UTF-8");
+            // 1. 先尝试 URL 查询参数 token=xxx
+            String query = session.getUri() != null ? session.getUri().getQuery() : null;
+            if (query != null && !query.isEmpty()) {
+                String[] params = query.split("&");
+                for (String param : params) {
+                    if (param.startsWith("token=")) {
+                        String[] parts = param.split("=", 2);
+                        if (parts.length == 2) {
+                            String token = parts[1];
+                            if (token.contains("%")) {
+                                token = java.net.URLDecoder.decode(token, "UTF-8");
+                            }
+                            if (!token.isEmpty()) {
+                                return token;
+                            }
                         }
-                        return token;
                     }
                 }
             }
 
-            System.err.println("未找到token参数");
+            // 2. 再尝试从握手请求的 Cookie 中读取 token（适配 HttpOnly Cookie 登录）
+            String cookieHeader = session.getHandshakeHeaders().getFirst("Cookie");
+            if (cookieHeader != null && !cookieHeader.isEmpty()) {
+                String token = parseTokenFromCookieHeader(cookieHeader);
+                if (token != null && !token.isEmpty()) {
+                    return token;
+                }
+            }
+
+            System.err.println("WebSocket连接没有查询参数且Cookie中无token");
             return null;
 
         } catch (Exception e) {
             System.err.println("提取token异常: " + e.getMessage());
             return null;
         }
+    }
+
+    /** 从 Cookie 头字符串中解析 token 的值（格式: name=value; token=xxx; ...） */
+    private String parseTokenFromCookieHeader(String cookieHeader) {
+        if (cookieHeader == null || cookieHeader.isEmpty()) {
+            return null;
+        }
+        String[] pairs = cookieHeader.split(";");
+        for (String pair : pairs) {
+            String trimmed = pair.trim();
+            if (trimmed.startsWith("token=")) {
+                String value = trimmed.substring(6).trim();
+                return value.isEmpty() ? null : value;
+            }
+        }
+        return null;
     }
 
     /**

@@ -9,7 +9,12 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.*;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,6 +30,12 @@ public class UserController {
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Value("${app.cookie.same-site:Lax}")
+    private String cookieSameSite;
+
+    @Value("${app.cookie.secure:false}")
+    private boolean cookieSecure;
 
     @PostMapping("/insertUser")
     @Operation(summary = "用户注册", description = "注册新用户账号")
@@ -49,11 +60,13 @@ public class UserController {
     @PostMapping(value = "/loginCheck", consumes = "application/json")
     @Operation(summary = "用户登录", description = "用户登录验证，成功返回JWT Token")
     public ApiResponse<Map<String, Object>> loginCheck(
-            @Parameter(description = "登录请求参数", required = true) @RequestBody Map<String, String> loginRequest) {
+            @Parameter(description = "登录请求参数", required = true) @RequestBody Map<String, String> loginRequest,
+            HttpServletResponse response) {
         try {
 
             Long userId = Long.parseLong(loginRequest.get("userId"));
             String userPwd = loginRequest.get("userPwd");
+            boolean rememberMe = Boolean.parseBoolean(loginRequest.getOrDefault("rememberMe", "false"));
 
             if (userService.selectUserByUserId(userId) == null) {
                 System.out.println("=== 用户登录失败:acc error ===");
@@ -67,12 +80,22 @@ public class UserController {
 
                 userService.updateOnlineStatus(userId, 1);
 
+                Claims claims = jwtUtil.parseToken(token);
+
+                ResponseCookie cookie = ResponseCookie.from("token", token)
+                        .httpOnly(true)
+                        .secure(cookieSecure)
+                        .path("/")
+                        .sameSite(cookieSameSite)
+                        .maxAge(rememberMe ? 7L * 24 * 60 * 60 : -1)
+                        .build();
+                response.addHeader("Set-Cookie", cookie.toString());
+
                 Map<String, Object> data = new HashMap<>();
                 data.put("token", token);
                 data.put("userId", userId);
                 data.put("user", user);
 
-                Claims claims = jwtUtil.parseToken(token);
                 Map<String, Object> tokenInfo = new HashMap<>();
                 tokenInfo.put("issuedAt", claims.getIssuedAt());
                 tokenInfo.put("expiration", claims.getExpiration());
@@ -98,10 +121,16 @@ public class UserController {
     @GetMapping("/checkToken")
     @Operation(summary = "验证Token有效性", description = "验证JWT Token并返回完整用户信息")
     public ApiResponse<Map<String, Object>> checkToken(
-            @Parameter(description = "Authorization头", required = true) @RequestHeader("Authorization") String authHeader) {
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            HttpServletRequest request) {
 
-        // 提取 token
-        String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+        String token = null;
+        if (authHeader != null && !authHeader.trim().isEmpty()) {
+            token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+        }
+        if (token == null || token.trim().isEmpty()) {
+            token = getTokenFromCookies(request);
+        }
 
         try {
             // 解析 token
@@ -159,5 +188,17 @@ public class UserController {
             // 其他错误
             return ApiResponse.error("Token验证失败: " + e.getMessage());
         }
+    }
+
+    private String getTokenFromCookies(HttpServletRequest request) {
+        if (request.getCookies() == null) {
+            return null;
+        }
+        for (javax.servlet.http.Cookie cookie : request.getCookies()) {
+            if ("token".equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
     }
 }
