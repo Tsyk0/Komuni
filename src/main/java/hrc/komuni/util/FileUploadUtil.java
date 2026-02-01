@@ -10,7 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 
-// FileUploadUtil.java
+// FileUploadUtil.java暂未用于头像上传
 @Component
 public class FileUploadUtil {
 
@@ -22,7 +22,8 @@ public class FileUploadUtil {
 
     /**
      * 上传头像文件
-     * @param file 图片文件
+     * 
+     * @param file   图片文件
      * @param userId 用户ID
      * @return 相对路径，如 "/uploads/avatars/1_123456789.jpg"
      */
@@ -56,6 +57,7 @@ public class FileUploadUtil {
 
     /**
      * 删除旧头像文件
+     * 
      * @param oldAvatarPath 旧头像路径
      */
     public void deleteOldAvatar(String oldAvatarPath) {

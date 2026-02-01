@@ -33,6 +33,15 @@ public class JwtFilter extends OncePerRequestFilter {
             response.setStatus(HttpServletResponse.SC_OK);
             return;
         }
+
+        String requestURI = request.getRequestURI();
+        // ✅ 公开路径直接放行，不校验 token（避免过期 Cookie 导致 loginCheck/insertUser 等被误拦）
+        if (!requiresAuthentication(requestURI)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // 以下仅对需要认证的路径：取 token 并校验
         String token = request.getHeader("Authorization");
         if (token == null || token.trim().isEmpty()) {
             token = getTokenFromCookies(request);
@@ -40,20 +49,12 @@ public class JwtFilter extends OncePerRequestFilter {
 
         if (token != null && token.startsWith("Bearer ")) {
             try {
-                // 去掉 Bearer 前缀
                 token = token.substring(7);
-
-                // 使用 JwtUtil 统一解析（而不是自己解析）
                 Claims claims = jwtUtil.parseToken(token);
-
-                // 检查是否过期
                 if (claims.getExpiration().before(new Date())) {
                     throw new RuntimeException("Token 已过期");
                 }
-
-                // 将用户ID保存到请求属性
                 request.setAttribute("userId", Long.parseLong(claims.getSubject()));
-
             } catch (RuntimeException e) {
                 addCorsHeaders(request, response);
                 sendErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED,
@@ -74,14 +75,9 @@ public class JwtFilter extends OncePerRequestFilter {
                 return;
             }
         } else {
-            // 对于需要认证的接口但没有token的情况
-            String requestURI = request.getRequestURI();
-            if (requiresAuthentication(requestURI)) {
-                addCorsHeaders(request, response);
-                sendErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED,
-                        "需要认证 Token");
-                return;
-            }
+            addCorsHeaders(request, response);
+            sendErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED, "需要认证 Token");
+            return;
         }
 
         filterChain.doFilter(request, response);

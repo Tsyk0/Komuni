@@ -26,5 +26,10 @@ public interface ConversationService {
     // 新增：查询群聊的已读回执设置
     Boolean getReadReceiptSetting(Long convId);
 
+    /**
+     * 更新会话的用户侧可修改属性（不包含 max_member_count、current_member_count、
+     * conv_status、create_time、update_time、conv_owner_id）
+     */
+    String updateConversationAttriUserOrientedByConvId(Conversation conversation);
 
 }

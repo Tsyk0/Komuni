@@ -110,7 +110,17 @@ public class ConversationServiceImpl implements ConversationService {
         return conversationMapper.getReadReceiptSetting(convId);
     }
 
-
-
+    @Override
+    public String updateConversationAttriUserOrientedByConvId(Conversation conversation) {
+        if (conversation == null || conversation.getConvId() == null) {
+            return "会话ID不能为空";
+        }
+        Conversation stored = selectConversationByConvId(conversation.getConvId());
+        if (stored == null) {
+            return "会话不存在";
+        }
+        int rows = conversationMapper.updateConversationAttriUserOrientedByConvId(conversation);
+        return rows == 1 ? "更新成功" : "更新失败";
+    }
 
 }

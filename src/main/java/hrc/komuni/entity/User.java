@@ -1,7 +1,7 @@
 package hrc.komuni.entity;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import java.util.Date;
 
@@ -18,7 +18,7 @@ public class User {
     private String userPhone;
     private String userEmail;
 
-//    @JsonIgnore // 密码不序列化到JSON
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String userPassword;
 
     private Integer userStatus; // 0-封禁，1-正常

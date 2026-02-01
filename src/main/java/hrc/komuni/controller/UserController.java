@@ -1,8 +1,11 @@
 package hrc.komuni.controller;
 
+import hrc.komuni.util.ImageBase64Util;
+import org.springframework.beans.factory.annotation.Autowired;
 import hrc.komuni.entity.User;
 import hrc.komuni.response.ApiResponse;
 import hrc.komuni.service.UserService;
+import hrc.komuni.util.ImageBase64Util;
 import hrc.komuni.util.JwtUtil;
 import io.jsonwebtoken.Claims;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,6 +15,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.*;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -37,6 +44,9 @@ public class UserController {
     @Value("${app.cookie.secure:false}")
     private boolean cookieSecure;
 
+    @Autowired
+    private ImageBase64Util imageBase64Util;
+
     @PostMapping("/insertUser")
     @Operation(summary = "用户注册", description = "注册新用户账号")
     public ApiResponse<Long> insertUser(
@@ -58,12 +68,11 @@ public class UserController {
     }
 
     @PostMapping(value = "/loginCheck", consumes = "application/json")
-    @Operation(summary = "用户登录", description = "用户登录验证，成功返回JWT Token")
+    @Operation(summary = "用户登录", description = "使用账号密码登录，成功返回 JWT 与用户信息并写入 Cookie。会话校验请使用 GET /user/checkToken")
     public ApiResponse<Map<String, Object>> loginCheck(
             @Parameter(description = "登录请求参数", required = true) @RequestBody Map<String, String> loginRequest,
             HttpServletResponse response) {
         try {
-
             Long userId = Long.parseLong(loginRequest.get("userId"));
             String userPwd = loginRequest.get("userPwd");
             boolean rememberMe = Boolean.parseBoolean(loginRequest.getOrDefault("rememberMe", "false"));
@@ -82,6 +91,16 @@ public class UserController {
 
                 Claims claims = jwtUtil.parseToken(token);
 
+                // 先清除旧的 token cookie（同名、Path 一致），避免浏览器不覆盖导致仍用旧用户 token
+                ResponseCookie clearCookie = ResponseCookie.from("token", "")
+                        .httpOnly(true)
+                        .secure(cookieSecure)
+                        .path("/")
+                        .sameSite(cookieSameSite)
+                        .maxAge(0)
+                        .build();
+                response.addHeader("Set-Cookie", clearCookie.toString());
+
                 ResponseCookie cookie = ResponseCookie.from("token", token)
                         .httpOnly(true)
                         .secure(cookieSecure)
@@ -99,7 +118,8 @@ public class UserController {
                 Map<String, Object> tokenInfo = new HashMap<>();
                 tokenInfo.put("issuedAt", claims.getIssuedAt());
                 tokenInfo.put("expiration", claims.getExpiration());
-                tokenInfo.put("expiresInSeconds", (claims.getExpiration().getTime() - System.currentTimeMillis()) / 1000);
+                tokenInfo.put("expiresInSeconds",
+                        (claims.getExpiration().getTime() - System.currentTimeMillis()) / 1000);
                 data.put("tokenInfo", tokenInfo);
 
                 System.out.println("=== 用户登录成功 ===");
@@ -172,7 +192,8 @@ public class UserController {
             expiredData.put("valid", false);
             expiredData.put("userId", e.getClaims().getSubject());
             expiredData.put("originalExpiration", e.getClaims().getExpiration());
-            expiredData.put("expiredSecondsAgo", (System.currentTimeMillis() - e.getClaims().getExpiration().getTime()) / 1000);
+            expiredData.put("expiredSecondsAgo",
+                    (System.currentTimeMillis() - e.getClaims().getExpiration().getTime()) / 1000);
 
             return ApiResponse.success("Token 已过期", expiredData);
 
@@ -200,5 +221,107 @@ public class UserController {
             }
         }
         return null;
+    }
+
+    @GetMapping("/selectUserByUserId")
+    @Operation(summary = "查询用户信息", description = "根据用户ID查询用户的详细信息")
+    public ApiResponse<User> selectUserByUserId(
+            @Parameter(description = "用户ID", required = true) @RequestAttribute Long userId) {
+        try {
+            User user = userService.selectUserByUserId(userId);
+            if (user == null) {
+                return ApiResponse.notFound("用户不存在");
+            }
+            return ApiResponse.success("查询成功", user);
+        } catch (Exception e) {
+            return ApiResponse.serverError("查询用户失败: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/updateUserPwdByOldPwd")
+    @Operation(summary = "修改密码", description = "校验原密码后更新新密码")
+    public ApiResponse<String> updateUserPwdByOldPwd(
+            @RequestAttribute Long userId,
+            @RequestBody Map<String, String> body) {
+        try {
+            String oldPwd = body.get("oldPwd");
+            String newPwd = body.get("newPwd");
+
+            if (oldPwd == null || oldPwd.trim().isEmpty() || newPwd == null || newPwd.trim().isEmpty()) {
+                return ApiResponse.badRequest("原密码或新密码不能为空");
+            }
+
+            if (!userService.checkUserPwd(userId, oldPwd)) {
+                return ApiResponse.unauthorized("原密码错误");
+            }
+
+            String result = userService.updateUserPwdByUserId(userId, newPwd);
+            return "更新成功".equals(result)
+                    ? ApiResponse.success(result)
+                    : ApiResponse.badRequest(result);
+        } catch (Exception e) {
+            return ApiResponse.serverError("修改密码失败: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/updateUserAllAttriByUserId")
+    @Operation(summary = "更新用户信息", description = "更新用户的全部个人信息")
+    public ApiResponse<String> updateUserAllAttriByUserId(
+            @Parameter(description = "用户信息", required = true) @RequestBody User user) {
+        try {
+            System.out.println("=== 收到用户更新请求 ===");
+            System.out.println("用户ID: " + user.getUserId());
+            System.out.println("昵称: " + user.getUserNickname());
+            System.out.println("头像字段存在: " + (user.getUserAvatar() != null));
+
+            if (user.getUserAvatar() != null) {
+                System.out.println("头像数据前50字符: " +
+                        user.getUserAvatar().substring(0, Math.min(50, user.getUserAvatar().length())));
+            }
+
+            // 1. 获取旧头像路径（用于删除）
+            User oldUser = userService.selectUserByUserId(user.getUserId());
+            String oldAvatarPath = null;
+            if (oldUser != null) {
+                oldAvatarPath = oldUser.getUserAvatar();
+                System.out.println("旧头像路径: " + oldAvatarPath);
+            }
+
+            // 2. 处理头像（如果是base64格式）
+            String userAvatar = user.getUserAvatar();
+            if (userAvatar != null && !userAvatar.isEmpty()) {
+                if (imageBase64Util.isBase64Image(userAvatar)) {
+                    System.out.println("检测到base64图片，开始处理...");
+                    // 保存base64图片为文件，获取相对路径
+                    String newAvatarPath = imageBase64Util.saveBase64Image(userAvatar, user.getUserId());
+                    user.setUserAvatar(newAvatarPath);
+                    System.out.println("新头像路径: " + newAvatarPath);
+
+                    // 删除旧头像文件
+                    if (oldAvatarPath != null && !oldAvatarPath.isEmpty()) {
+                        imageBase64Util.deleteOldAvatar(oldAvatarPath);
+                    }
+                } else {
+                    System.out.println("头像不是base64格式，可能是已有路径: " + userAvatar);
+                }
+            } else {
+                System.out.println("未提供头像数据，保持原头像不变");
+                // 保持原头像不变
+                if (oldUser != null) {
+                    user.setUserAvatar(oldUser.getUserAvatar());
+                }
+            }
+
+            // 3. 更新用户信息
+            String result = userService.updateUserAllAttriByUserId(user);
+            System.out.println("更新结果: " + result);
+
+            return ApiResponse.success(result);
+
+        } catch (Exception e) {
+            System.err.println("更新用户信息失败: " + e.getMessage());
+            e.printStackTrace();
+            return ApiResponse.serverError("更新用户信息失败: " + e.getMessage());
+        }
     }
 }
