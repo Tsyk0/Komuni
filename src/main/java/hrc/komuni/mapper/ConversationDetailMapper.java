@@ -22,7 +22,13 @@ public interface ConversationDetailMapper {
             "c.conv_status, " +
             "c.update_time, " +  // 移除：c.current_msg_seq,
             "cm.private_display_name, " +
-            "cm.unread_count " +
+            "cm.unread_count, " +
+            "cm.member_nickname, " +
+            "cm.member_role, " +
+            "cm.member_status, " +
+            "cm.last_read_time, " +
+            "cm.last_speak_time, " +
+            "cm.join_time " +
             "FROM conversation c " +
             "INNER JOIN conversation_member cm ON c.conv_id = cm.conv_id " +
             "    AND cm.user_id = #{userId} " +
@@ -40,7 +46,13 @@ public interface ConversationDetailMapper {
             // 移除：@Result(property = "currentMsgSeq", column = "current_msg_seq"),
             @Result(property = "updateTime", column = "update_time"),
             @Result(property = "privateDisplayName", column = "private_display_name"),
-            @Result(property = "unreadCount", column = "unread_count")
+            @Result(property = "unreadCount", column = "unread_count"),
+            @Result(property = "memberNickname", column = "member_nickname"),
+            @Result(property = "memberRole", column = "member_role"),
+            @Result(property = "memberStatus", column = "member_status"),
+            @Result(property = "lastReadTime", column = "last_read_time"),
+            @Result(property = "lastSpeakTime", column = "last_speak_time"),
+            @Result(property = "joinTime", column = "join_time")
     })
     List<ConversationDetailDTO> selectBasicConversationsByUserId(@Param("userId") Long userId);
 

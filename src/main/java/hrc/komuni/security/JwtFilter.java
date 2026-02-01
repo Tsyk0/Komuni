@@ -140,6 +140,7 @@ public class JwtFilter extends OncePerRequestFilter {
         // 定义所有需要认证的模块前缀
         String[] securedModules = {
                 "/user/", // 用户模块（除白名单外）
+                "/friendInfo/",
                 "/friendRelationDetail/",
                 "/conversationDetail/",
                 "/messageDetail/",
