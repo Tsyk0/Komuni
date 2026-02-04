@@ -20,8 +20,12 @@ public class MessageController {
     @PostMapping("/sendMessage")
     @Operation(summary = "发送消息", description = "发送一条新的消息记录")
     public ApiResponse<Message> sendMessage(
-            @Parameter(description = "消息对象", required = true) @RequestBody Message message) {
+            @Parameter(description = "消息对象", required = true) @RequestBody Message message,
+            @Parameter(hidden = true) @RequestAttribute("userId") Long userId) {
         try {
+            // 使用从Token解析出的userId覆盖请求体中的senderId，确保安全性
+            message.setSenderId(userId);
+
             Long messageId = messageService.insertMessage(message);
             if (messageId != null) {
                 return ApiResponse.success("消息保存成功", message);

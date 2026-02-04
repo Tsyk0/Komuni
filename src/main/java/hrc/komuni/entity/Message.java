@@ -18,8 +18,6 @@ public class Message {
     @NotNull(message = "发送者ID不能为空")
     private Long senderId;
 
-    private Long receiverId; // 单聊时使用
-
     @NotBlank(message = "消息类型不能为空")
     private String messageType; // text/image/file/audio/video/location/emoji/system
 
