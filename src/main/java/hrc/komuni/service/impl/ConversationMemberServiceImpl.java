@@ -52,6 +52,12 @@ public class ConversationMemberServiceImpl implements ConversationMemberService 
         return conversationMemberMapper.updateLastReadTime(convId, userId);
     }
 
+    @Override
+    public List<hrc.komuni.dto.CompressedConvMemberDTO> getCompressedMembers(Long convId) {
+        return conversationMemberMapper.selectCompressedMembers(convId);
+    }
+
+
 
 
 }

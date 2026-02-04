@@ -32,7 +32,7 @@ public class MessageDetailController {
             @Parameter(description = "会话ID", required = true) @RequestParam Long convId,
             @Parameter(description = "当前用户ID", required = true) @RequestAttribute("userId") Long currentUserId,
             @Parameter(description = "页码", required = false, example = "1") @RequestParam(defaultValue = "1") Integer page,
-            @Parameter(description = "每页数量", required = false, example = "20") @RequestParam(defaultValue = "20") Integer pageSize) {
+            @Parameter(description = "每页数量", required = false, example = "1000") @RequestParam(defaultValue = "20") Integer pageSize) {
         try {
             List<MessageDetailDTO> messageDetails = messageDetailService.getMessageDetailsByConvId(
                     convId, page, pageSize, currentUserId // 传入currentUserId

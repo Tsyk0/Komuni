@@ -32,6 +32,18 @@ public interface ConversationMemberMapper {
             "WHERE conv_id = #{convId} AND user_id = #{userId}")
     int updateLastReadTime(@Param("convId") Long convId, @Param("userId") Long userId);
 
+    @Select("SELECT " +
+            "cm.user_id, " +
+            "cm.member_nickname, " +
+            "u.user_nickname, " +
+            "u.user_avatar, " +
+            "cm.member_role as role " +
+            "FROM conversation_member cm " +
+            "INNER JOIN user u ON cm.user_id = u.user_id " +
+            "WHERE cm.conv_id = #{convId} AND cm.member_status = 1")
+    List<hrc.komuni.dto.CompressedConvMemberDTO> selectCompressedMembers(@Param("convId") Long convId);
+
+
 
 
 }

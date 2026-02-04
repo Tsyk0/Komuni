@@ -14,6 +14,12 @@ public interface ConversationMemberService {
 
     int updateLastReadTime(Long convId, Long userId);
 
+    /**
+     * 获取指定群聊的所有成员信息（压缩版）
+     */
+    List<hrc.komuni.dto.CompressedConvMemberDTO> getCompressedMembers(Long convId);
+
+
 
     // ============ 未在Controller中使用的方法（放在底端） ============
 }
